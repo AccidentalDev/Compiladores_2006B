@@ -1,0 +1,40 @@
+		     //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>   Semantica   <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                     if(idKey!=""){
+                        if(ProtOMod==1){
+                           Proto pt=(Proto)tabProtos.get(idKey);
+                           if(pt.parametros.contains(lexema)){
+                              String err="Ya existe un argumento con ese nombre: "+lexema;
+                              editor.errCount++;
+                              editor.errores(estado,3,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                           }
+                           pt.parametros.add(lexema);
+                        }else if(ProtOMod==2&&modulo!=""){
+                           //Agrega el parametro en la tabla de simbolos:
+                           String param=lexema+"@"+modulo;
+                           if(!tabSim.containsKey(param)){
+                              tabSim.put(param,new Simbolo(param,'A',tipo,""));
+                              idKey=param;
+                           }else{
+                              idKey="";
+                              String err="Ya existe un argumento con ese nombre: "+lexema;
+                              editor.errCount++;
+                              editor.errores(estado,3,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                           }
+                           if(tieneProto){
+                              Proto pt=(Proto)tabProtos.get(modulo);
+                              if(argC[0]==pt.parametros.size()){
+                                 String err="El numero de parametros excede al de los parametros definidos en el prototipo.";
+                                 editor.errCount++;
+                                 editor.errores(estado,3,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                              }else
+                                 if(argC[0]<pt.parametros.size()&&!pt.parametros.get(argC[0]).equals(lexema)){
+                                    String err="El argumento no concuerda con lo definido en el prototipo de este modulo: "+lexema;
+                                    editor.errCount++;
+                                    editor.errores(estado,3,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                                 }
+                              argC[0]++;
+                           }
+                        }
+                        cspcfyp=cspcfyp+letraTipo();
+                     }
+                     //>>>>>>>>>>>>>>>>>>>>>>>>>>>   Fin de Semantica   <<<<<<<<<<<<<<<<<<<<<<<<<<

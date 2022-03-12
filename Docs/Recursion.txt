@@ -1,0 +1,24 @@
+Reglas que utilizan a Expresion:
+-Expresion
+-Dimensiones_Identificador
+-Regla_OR
+-Desde
+
+Reglas que utilizan a Regla_OR:
+-Expresion
+-Parametros_Identificador
+-Regresar
+-Si
+-Mientras
+-Hacer
+-Asignacion
+
+Reglas que usan a Dimensiones_Identificador:
+-Leer
+-Expresion
+
+Reglas que usan a Parametros_Identificador:
+-Parametros_Identificador
+-Expresion
+-Imprimir
+-Llamada_Procedimiento

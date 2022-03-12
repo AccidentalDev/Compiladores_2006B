@@ -1,0 +1,16 @@
+1	JMP  0,$LabelP
+2	LIT  640,0
+3	STO  0,x
+4	LIT  480,0
+5	STO  0,y
+6	LIT  0,0
+7	LOD  c,0
+8	OPR  0,20
+9	LIT  " ",0
+10	OPR  0,20
+11	LIT  1,0
+12	LOD  c,0
+13	OPR  0,20
+14	LIT  0,0
+15	OPR  s.a,19
+16	OPR  0,0

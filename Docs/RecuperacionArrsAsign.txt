@@ -1,0 +1,12 @@
+Desviaciones: (Nuevo)
+Normal: 0
+Unidim: 19
+Bidim:  29
+General:42
+
+
+Desviaciones: (Viejo)
+Normal: 0
+Unidim: 19
+Bidim:  25
+General:34

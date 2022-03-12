@@ -1,0 +1,11 @@
+La instrucción para ejecutar la Máquina Virtual para el lenguaje I (MVI) desde la línea de comandos es:
+
+java -jar mvi.jar <archivo>.mvi [-d [NL]]
+
+donde '<archivo>.mvi' será el nombre del archivo a ejecutar (de ser necesario se especificará también la ruta antes del nombre); el primer parámetro '-d' (que es opcional como se especifica debido a los corchetes) le notifica a la MVI que se depurará el código al estarse ejecutando; el segundo parámetro opcional que existirá sólo si existe '-d' será 'NL' e indicará el número de línea desde donde se hará la depuración (en caso de no existir se depurará desde la primera línea).
+
+Las etiquetas que serán necesarias y obligatorias son:
+
+$LabelP, que indica donde comienza el programa principal
+$PRINCIPAL, que indica donde terminan las inicializaciones globales
+$LabelT, que indica el tamaño (en líneas) del codigo PL/0

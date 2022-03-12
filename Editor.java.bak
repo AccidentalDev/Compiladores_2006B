@@ -1,0 +1,366 @@
+/*
+ *Carlos Francisco Camacho Uribe
+ *Taller de Compiladores
+ *CUCEI, UdeG
+*/
+
+import javax.swing.*;
+import javax.swing.event.*;
+import java.awt.event.*;
+import java.awt.*;
+import java.io.*;
+import java.util.Vector;
+import java.beans.PropertyVetoException;
+
+
+class Eventos implements ActionListener{
+   private Editor editor;
+   
+   public Eventos (Editor e){
+      editor=e;
+   }
+   
+   public void actionPerformed(ActionEvent e){
+      if(e.getSource().equals(editor.nuevo)||e.getSource().equals(editor.bNew)){//---- ** Nuevo **
+         System.out.println("Nuevo");
+      }
+      if(e.getSource().equals(editor.open)||e.getSource().equals(editor.bOpen)){//---- ** Abrir **
+         System.out.println("Abrir");
+      }
+      if(e.getSource().equals(editor.close)){//-------------------------------------- ** Cerrar **
+         System.out.println("Cerrar");
+      }
+      if(e.getSource().equals(editor.save)||e.getSource().equals(editor.bSave)){//-- ** Guardar **
+         System.out.println("Guardar");
+      }
+      if(e.getSource().equals(editor.saveAs)){//------------------------------- ** Guardar como **
+         System.out.println("Guardar como");
+      }
+      if(e.getSource().equals(editor.saveAll)||e.getSource().equals(editor.bSaveAll)){//Guardar todo
+         System.out.println("Guardar todo");
+      }
+      if(e.getSource().equals(editor.salir)){//--------------------------------------- ** Salir **
+         editor.cerrarEditor();
+      }
+      
+      
+      if(e.getSource().equals(editor.cut)||e.getSource().equals(editor.bCut)){//----- ** Cortar **
+         System.out.println("Cortar");
+      }
+      if(e.getSource().equals(editor.copy)||e.getSource().equals(editor.bCopy)){//--- ** Copiar **
+         System.out.println("Copiar");
+      }
+      if(e.getSource().equals(editor.paste)||e.getSource().equals(editor.bPaste)){//-- ** Pegar **
+         System.out.println("Pegar");
+      }
+      if(e.getSource().equals(editor.undo)||e.getSource().equals(editor.bUndo)){//- ** Deshacer **
+         System.out.println("Deshacer");
+      }
+      if(e.getSource().equals(editor.redo)||e.getSource().equals(editor.bRedo)){//-- ** Rehacer **
+         System.out.println("Rehacer");
+      }
+      if(e.getSource().equals(editor.todo)){//----------------------------------- ** Select all **
+         System.out.println("Seleccionar todo");
+      }
+      
+      
+      if(e.getSource().equals(editor.busc)||e.getSource().equals(editor.bSearch)){//- ** Buscar **
+         System.out.println("Buscar");
+      }
+      if(e.getSource().equals(editor.reemplazar)||e.getSource().equals(editor.bReplace)){//Reemplazar **
+         System.out.println("Reemplazar");
+      }
+      if(e.getSource().equals(editor.irA)){//------------------------------------------ ** Ir a **
+         System.out.println("Ir a");
+      }
+      
+      
+      if(e.getSource().equals(editor.compile)||e.getSource().equals(editor.bCompile)){//*Compilar*
+         System.out.println("Compilar");
+      }
+      if(e.getSource().equals(editor.execute)||e.getSource().equals(editor.bExecute)){//*Ejecutar*
+         System.out.println("Ejecutar");
+      }
+      if(e.getSource().equals(editor.depurar)||e.getSource().equals(editor.bDebug)){// **Depurar**
+         System.out.println("Depurar");
+      }
+      
+      
+      if(e.getSource().equals(editor.autor)||e.getSource().equals(editor.bAbout)){//-- ** Autor **
+         System.out.println("Autor");
+      }
+      if(e.getSource().equals(editor.personalize)){//-------------------------- ** Personalizar **
+         System.out.println("Personalizar");
+      }
+   }
+}//-------Fin de la clase Eventos-------
+
+
+
+//******************************** CLASE PRINCIPAL ********************************
+public class Editor extends JFrame{
+   private JToolBar barraHerramientas;
+   private JMenuBar barraMenu;
+   private JMenu archivo,edicion,buscar,compilar,ayuda;
+   protected JMenuItem nuevo,open,close,save,saveAs,saveAll,salir;
+   protected JMenuItem cut,copy,paste,undo,redo,todo;
+   protected JMenuItem busc,reemplazar,irA;
+   protected JMenuItem compile,execute,depurar;
+   protected JMenuItem autor,personalize;
+   protected JButton bNew,bOpen,bSave,bSaveAll,bCut,bCopy,bPaste,bSearch,bReplace;
+   protected JButton bUndo,bRedo,bCompile,bExecute,bDebug,bAbout;
+   
+   //private JScrollPane scrollMain;
+   protected JDesktopPane areaVentanas;
+   public Vector ventanas;
+   
+   protected Eventos events;
+   
+   public Editor(){
+      super("Editor");
+      
+      startComponents();
+      getContentPane().setLayout(new BorderLayout());
+      getContentPane().add("North",barraHerramientas);
+      getContentPane().add("Center",areaVentanas);
+      
+      setSize(800,600);
+      setLocation(30,30);
+   }
+   private void startComponents(){
+      events=new Eventos(this);
+      
+      setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+      addWindowListener(new WindowAdapter(){
+         public void windowClosing(WindowEvent e){
+            cerrarEditor();
+         }
+      });
+      //--------------------Inicializa el menu-------------------
+      barraMenu=new JMenuBar();
+      archivo=new JMenu("Archivo");
+      archivo.setMnemonic('A');
+      edicion=new JMenu("Edición");
+      edicion.setMnemonic('E');
+      buscar=new JMenu("Buscar");
+      buscar.setMnemonic('B');
+      compilar=new JMenu("Compilar");
+      compilar.setMnemonic('C');
+      ayuda=new JMenu("?");
+      ayuda.setMnemonic('?');
+      
+      nuevo=new JMenuItem("Nuevo");
+      nuevo.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N,InputEvent.CTRL_MASK));
+      nuevo.addActionListener(events);
+      open=new JMenuItem("Abrir");
+      open.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_A,InputEvent.CTRL_MASK));
+      open.addActionListener(events);
+      close=new JMenuItem("Cerrar");
+      close.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_K,InputEvent.CTRL_MASK));
+      close.addActionListener(events);
+      save=new JMenuItem("Guardar");
+      save.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_G,InputEvent.CTRL_MASK));
+      save.addActionListener(events);
+      saveAs=new JMenuItem("Guardar como");
+      saveAs.addActionListener(events);
+      saveAll=new JMenuItem("Guardar todo");
+      saveAll.addActionListener(events);
+      salir=new JMenuItem("Salir");
+      salir.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F4,InputEvent.ALT_MASK));
+      salir.addActionListener(events);
+      archivo.add(nuevo);
+      archivo.add(open);
+      archivo.add(close);
+      archivo.add(save);
+      archivo.add(saveAs);
+      archivo.add(saveAll);
+      archivo.addSeparator();
+      archivo.add(salir);
+      
+      cut=new JMenuItem("Cortar");
+      cut.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_X,InputEvent.CTRL_MASK));
+      cut.addActionListener(events);
+      copy=new JMenuItem("Copiar");
+      copy.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_C,InputEvent.CTRL_MASK));
+      copy.addActionListener(events);
+      paste=new JMenuItem("Pegar");
+      paste.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_V,InputEvent.CTRL_MASK));
+      paste.addActionListener(events);
+      //deshacer=new UndoAction(this);
+      //rehacer=new RedoAction(this);
+      undo=new JMenuItem("Deshacer");//undo=new JMenuItem(deshacer);
+      undo.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Z,InputEvent.CTRL_MASK));
+      undo.addActionListener(events);
+      redo=new JMenuItem("Rehacer");//redo=new JMenuItem(rehacer);
+      redo.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Y,InputEvent.CTRL_MASK));
+      redo.addActionListener(events);
+      todo=new JMenuItem("Seleccionar todo");
+      todo.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_E,InputEvent.CTRL_MASK));
+      todo.addActionListener(events);
+      edicion.add(cut);
+      edicion.add(copy);
+      edicion.add(paste);
+      edicion.add(undo);
+      edicion.add(redo);
+      edicion.add(todo);
+      
+      busc=new JMenuItem("Buscar...");
+      busc.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_B,InputEvent.CTRL_MASK));
+      busc.addActionListener(events);
+      reemplazar=new JMenuItem("Reemplazar...");
+      reemplazar.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_R,InputEvent.CTRL_MASK));
+      reemplazar.addActionListener(events);
+      irA=new JMenuItem("Ir a...");
+      irA.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_I,InputEvent.CTRL_MASK));
+      irA.addActionListener(events);
+      buscar.add(busc);
+      buscar.add(reemplazar);
+      buscar.add(irA);
+      
+      compile=new JMenuItem("Compilar");
+      compile.setAccelerator(KeyStroke.getKeyStroke("F9"));
+      compile.addActionListener(events);
+      execute=new JMenuItem("Ejecutar");
+      execute.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F9,InputEvent.CTRL_MASK));
+      execute.addActionListener(events);
+      depurar=new JMenuItem("Depurar");
+      depurar.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F9,InputEvent.ALT_MASK));
+      depurar.addActionListener(events);
+      compilar.add(compile);
+      compilar.add(execute);
+      compilar.add(depurar);
+      
+      autor=new JMenuItem("Acerca de...");
+      autor.setAccelerator(KeyStroke.getKeyStroke("F2"));
+      autor.addActionListener(events);
+      personalize=new JMenuItem("Personalizar");
+      personalize.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_P,InputEvent.CTRL_MASK));
+      personalize.addActionListener(events);
+      ayuda.add(autor);
+      ayuda.add(personalize);
+      
+      barraMenu.add(archivo);
+      barraMenu.add(edicion);
+      barraMenu.add(buscar);
+      barraMenu.add(compilar);
+      barraMenu.add(ayuda);
+      
+      setJMenuBar(barraMenu);
+      //--------------------Fin del menu-------------------
+      
+      //--------------Inicializa barra de Herramientas-------------
+      barraHerramientas=new JToolBar();
+      bNew=new JButton(new ImageIcon("nuevo.gif"));
+      bNew.addActionListener(events);
+      bOpen=new JButton(new ImageIcon("open.gif"));
+      bOpen.addActionListener(events);
+      bSave=new JButton(new ImageIcon("diskett2s.GIF"));
+      bSave.addActionListener(events);
+      //bSave.setEnabled(false);
+      bSaveAll=new JButton(new ImageIcon("saveAll.gif"));
+      bSaveAll.addActionListener(events);
+      //bSaveAll.setEnabled(false);
+      bCut=new JButton(new ImageIcon("cut.GIF"));
+      bCut.addActionListener(events);
+      //bCut.setEnabled(false);
+      bCopy=new JButton(new ImageIcon("copiar.gif"));
+      bCopy.addActionListener(events);
+      //bCopy.setEnabled(false);
+      bPaste=new JButton(new ImageIcon("paste.GIF"));
+      bPaste.addActionListener(events);
+      //bPaste.setEnabled(false);
+      bUndo=new JButton(new ImageIcon("undo2.gif"));
+      bUndo.addActionListener(events);
+      //bUndo.setEnabled(false);
+      bRedo=new JButton(new ImageIcon("redo2.gif"));
+      bRedo.addActionListener(events);
+      //bRedo.setEnabled(false);
+      bSearch=new JButton(new ImageIcon("buscar.gif"));
+      bSearch.addActionListener(events);
+      //bSearch.setEnabled(false);
+      bReplace=new JButton(new ImageIcon("reemplazar.gif"));
+      bReplace.addActionListener(events);
+      //bReplace.setEnabled(false);
+      bCompile=new JButton(new ImageIcon("compilar.gif"));
+      bCompile.addActionListener(events);
+      //bCompile.setEnabled(false);
+      bExecute=new JButton(new ImageIcon("play.gif"));
+      bExecute.addActionListener(events);
+      //bExecute.setEnabled(false);
+      bDebug=new JButton(new ImageIcon("debug.gif"));
+      bDebug.addActionListener(events);
+      //bDebug.setEnabled(false);
+      bAbout=new JButton(new ImageIcon("help.gif"));
+      bAbout.addActionListener(events);
+      //bAbout.setEnabled(false);
+      
+      barraHerramientas.add(bNew);
+      barraHerramientas.add(bOpen);
+      barraHerramientas.add(bSave);
+      barraHerramientas.add(bSaveAll);
+      barraHerramientas.addSeparator();
+      barraHerramientas.addSeparator();
+      barraHerramientas.add(bCut);
+      barraHerramientas.add(bCopy);
+      barraHerramientas.add(bPaste);
+      barraHerramientas.add(bUndo);
+      barraHerramientas.add(bRedo);
+      barraHerramientas.addSeparator();
+      barraHerramientas.addSeparator();
+      barraHerramientas.add(bSearch);
+      barraHerramientas.add(bReplace);
+      barraHerramientas.addSeparator();
+      barraHerramientas.addSeparator();
+      barraHerramientas.add(bCompile);
+      barraHerramientas.add(bExecute);
+      barraHerramientas.add(bDebug);
+      barraHerramientas.addSeparator();
+      barraHerramientas.addSeparator();
+      barraHerramientas.add(bAbout);
+      //-----------------Fin barra de Herramientas-----------------
+      
+      //-----Inicia area de ventanas y una ventana por default-----
+      areaVentanas=new JDesktopPane();
+      areaVentanas.setBackground(Color.gray);
+      //scrollMain=new JScrollPane();
+      //scrollMain.getViewport().add(areaVentanas);
+      
+      ventanas=new Vector(5,5);
+      JTextArea areaTexto,lineCounter;
+      areaTexto=new JTextArea();
+      lineCounter=new JTextArea();
+      lineCounter.setBackground(Color.lightGray);
+      lineCounter.setEditable(false);
+      
+      JScrollPane scroller;
+      scroller=new JScrollPane();
+      scroller.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
+      scroller.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_ALWAYS);
+      scroller.getViewport().add(areaTexto);
+      scroller.setRowHeaderView(lineCounter);
+      
+      JInternalFrame temp=new JInternalFrame("Sin titulo",true,true,true,true);
+      temp.getContentPane().add(scroller);
+      temp.setSize(500,350);
+      
+      ventanas.add(temp);
+      areaVentanas.add(temp);
+      temp.show();
+      try{
+         temp.setMaximum(true);
+      }catch(PropertyVetoException pve){}
+      /*try{
+         temp.setSelected(true);
+      }catch(PropertyVetoException pve){}*/
+      //--------------------Fin area de ventanas-------------------
+   }
+   
+   public void cerrarEditor(){
+      System.out.println("Terminando la aplicacion");
+      System.exit(0);
+   }
+   
+   public static void main(String a[]){
+      new Editor().show();
+   }
+}

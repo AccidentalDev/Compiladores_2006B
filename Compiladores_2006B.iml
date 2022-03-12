@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="JAVA_MODULE" version="4">
+  <component name="NewModuleRootManager" inherit-compiler-output="true">
+    <exclude-output />
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/EditorV2_1.2" />
+      <excludeFolder url="file://$MODULE_DIR$/Dic_04" />
+      <excludeFolder url="file://$MODULE_DIR$/Agosto_28" />
+      <excludeFolder url="file://$MODULE_DIR$/Dic_11" />
+      <excludeFolder url="file://$MODULE_DIR$/Nov_23" />
+      <excludeFolder url="file://$MODULE_DIR$/Nov_27" />
+      <excludeFolder url="file://$MODULE_DIR$/Oct_02" />
+      <excludeFolder url="file://$MODULE_DIR$/Oct_16" />
+      <excludeFolder url="file://$MODULE_DIR$/Oct_18" />
+      <excludeFolder url="file://$MODULE_DIR$/Oct_20" />
+      <excludeFolder url="file://$MODULE_DIR$/Oct_23" />
+      <excludeFolder url="file://$MODULE_DIR$/Oct_25" />
+      <excludeFolder url="file://$MODULE_DIR$/Sep_04" />
+      <excludeFolder url="file://$MODULE_DIR$/Sep_06" />
+      <excludeFolder url="file://$MODULE_DIR$/Sep_11" />
+      <excludeFolder url="file://$MODULE_DIR$/Sep_25" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>

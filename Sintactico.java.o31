@@ -1,0 +1,4290 @@
+import java.io.*;
+import javax.swing.text.*;
+import java.util.Vector;
+import java.util.Stack;
+import java.util.ArrayList;
+import java.util.Hashtable;
+
+class Simbolo{
+   public char clase,tipo_dato;
+   public int d1,d2;
+   public String cspcfyp;
+   
+   public Simbolo(char c,char td,String s){
+      clase=c;
+      tipo_dato=td;
+      cspcfyp=s;
+   }
+}
+
+public class Sintactico{
+   private Editor editor;
+   private Ventana win;
+   public String lexema,token,fuente,reserved[];
+   protected int estado,lineCounter,i,tipoChar;
+   private char c;
+   protected Vector librerias;
+   public int etapa,tipoElem,estate;
+   public Stack infoStates,padresState;
+   protected Hashtable Reglas,ReglasE;
+   private ErrorHandler mError;
+   boolean reuse,modulosBan;
+   
+   public Sintactico(Ventana v,Editor e){
+      editor=e;
+      win=v;
+      i=-1;
+      lineCounter=0;
+      lexema="";
+      estado=0;
+      etapa=0;
+      estate=0;
+      modulosBan=false;
+      //1=Archivos, 2=Constantes, 3=Variables, 4=Arreglos, 5=Registros, 6=Modulos, 7=Principal
+      reserved=new String[37];
+      getReserved();
+      
+      librerias=new Vector(5,2);
+      infoStates=new Stack();
+      padresState=new Stack();
+      Reglas=new Hashtable(33);
+      ReglasE=new Hashtable(33);
+      llenaReglas();
+      mError=new ErrorHandler(this);
+      
+      if(win.areaTexto!=null){
+         try{
+            fuente=win.areaTexto.getDocument().getText(0,win.areaTexto.getDocument().getLength());
+         }catch(BadLocationException ble){
+            System.out.println("Error al capturar el texto para analizarlo");
+         }
+      }else{
+         //Abre directamente el archivo
+         try{
+            FileReader fr=new FileReader(win.ruta);
+            BufferedReader entrada=new BufferedReader(fr);
+            
+            int pos=win.ruta.lastIndexOf('\\');
+            String tmpName=win.ruta.substring(pos+1);
+            
+            String s=entrada.readLine();
+            if(s!=null){
+               fuente=s.toString();
+               while((s=entrada.readLine())!=null){
+                  fuente=fuente+"\n"+s.toString();
+               }
+            }
+            entrada.close();
+            
+         }catch(IOException ioex){
+            System.out.println("No se pudo abrir el archivo: "+win.ruta);
+         }
+      }
+   }
+   
+   private void getReserved(){
+      String s;
+      int a=0;
+      try{
+         FileReader fr=new FileReader("Palabras Reservadas.txt");
+         BufferedReader entrada=new BufferedReader(fr);
+         while((s=entrada.readLine())!=null){
+            reserved[a]=s;
+            a++;
+         }
+         entrada.close();
+      }catch(IOException ioex){
+         System.out.println("No se pudo abrir el archivo de palabras reservadas");
+      }
+   }
+   private int findReserved(String cadena){
+      boolean si=false;
+      int n=-1;
+      
+      for(int a=0;a<reserved.length&&!si;a++)
+         if(reserved[a].equals(cadena)){
+            si=true;
+            n=a;
+         }
+      
+      return n;
+   }
+   
+   public int tipoLexema(){
+      if(lexema.equals("ARCHIVOS")){
+         return 1;
+      }else if(lexema.equals("[")){
+         return 2;
+      }else if(lexema.equals("]")){
+         return 3;
+      }else if(lexema.equals(",")){
+         return 4;
+      }else if(token.equals("<Cadena>")){
+         return 5;
+      }else if(lexema.equals("CONSTANTES")){
+         return 6;
+      }else if(token.equals("<Identificador>")){
+         return 7;
+      }else if(token.equals("<Op_Asign>")){
+         return 8;
+      }else if(token.equals("<Entero>")){
+         return 9;
+      }else if(token.equals("<Real>")){
+         return 10;
+      }else if(token.equals("<Logico>")){
+         return 11;
+      }else if(lexema.equals("VARIABLES")){
+         return 12;
+      }else if(lexema.equals(";")){
+         return 13;
+      }else if(lexema.equals("ENTERO")){
+         return 14;
+      }else if(lexema.equals("REAL")){
+         return 15;
+      }else if(lexema.equals("CADENA")){
+         return 16;
+      }else if(lexema.equals("LOGICO")){
+         return 17;
+      }else if(lexema.equals("ARREGLOS")){
+         return 18;
+      }else if(lexema.equals("{")){
+         return 19;
+      }else if(lexema.equals("}")){
+         return 20;
+      }else if(lexema.equals("REGISTROS")){
+         return 21;
+      }else if(lexema.equals("MODULOS")){
+         return 22;
+      }else if(lexema.equals("PROTOTIPOS")){
+         return 23;
+      }else if(lexema.equals("PRINCIPAL")){
+         return 24;
+      }else if(lexema.equals("(")){
+         return 25;
+      }else if(lexema.equals(")")){
+         return 26;
+      }
+      
+      return 0;
+   }
+   public void Programa(){
+      //estate=0;
+      int nivel=0;
+      reuse=false;
+      tipoElem=0;
+      
+      token=dameToken();
+      
+      while(token!="\0"){
+         
+         for(int n=0;n<nivel;n++)
+            System.out.print("   ");
+         
+         if(!reuse){
+            tipoElem=tipoLexema();
+            System.out.print(lexema);
+         }else
+            reuse=false;
+         
+         System.out.println(" "+estate+" ");
+         
+         switch(estate){
+            case 0:{
+                  if(tipoElem==1){
+                     estate=1;
+                     if(etapa==0){
+                        etapa=1;
+                     }else
+                        if(etapa==1){
+                           String err="No se puede repetir la declaracion de archivos: "+lexema;
+                           editor.errCount++;
+                           editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        }else{
+                           String err="Los archivos se declaran solo al principio del programa: "+lexema;
+                           editor.errCount++;
+                           editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        }
+                  }else
+                     if(tipoElem==6){
+                        infoStates.push(new Integer(0));
+                        padresState.push(new Integer(0));
+                        estate=5;
+                        nivel++;
+                        if(etapa<=1){
+                           etapa=2;
+                        }else{
+                           String err="Las constantes se deben declarar una sola vez y solo al principio del programa despues de los archivos si los hay.";
+                           editor.errCount++;
+                           editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        }
+                     }else
+                        if(tipoElem==12){
+                           infoStates.push(new Integer(0));
+                           padresState.push(new Integer(0));
+                           estate=11;
+                           nivel++;
+                           if(etapa<=2){
+                              etapa=3;
+                           }else{
+                              String err="Las variables se deben declarar una sola vez y solo despues de los archivos y las constantes si los hay.";
+                              editor.errCount++;
+                              editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                           }
+                        }else
+                           if(tipoElem==18){
+                              infoStates.push(new Integer(0));
+                              padresState.push(new Integer(0));
+                              estate=19;
+                              nivel++;
+                              if(etapa<=3){
+                                 etapa=4;
+                              }else{
+                                 String err="Los arreglos se deben declarar una sola vez y solo despues de los archivos, las constantes y/o las variables si los hay.";
+                                 editor.errCount++;
+                                 editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                              }
+                           }else
+                              if(tipoElem==21){
+                                 infoStates.push(new Integer(0));
+                                 padresState.push(new Integer(0));
+                                 estate=40;
+                                 nivel++;
+                                 if(etapa<=4){
+                                    etapa=5;
+                                 }else{
+                                    String err="Los registros se deben declarar una sola vez y solo despues de los archivos, las constantes, las variables y/o los arreglos, si los hay.";
+                                    editor.errCount++;
+                                    editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                                 }
+                              }else
+                                 if(tipoElem==23){
+                                    infoStates.push(new Integer(0));
+                                    padresState.push(new Integer(0));
+                                    estate=53;
+                                    nivel++;
+                                    if(etapa<=5){
+                                       etapa=6;
+                                    }else{
+                                       String err="Los prototipos se deben declarar una sola vez y solo despues de los archivos, las constantes, las variables, los arreglos y/o los registros, si los hay.";
+                                       editor.errCount++;
+                                       editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                                    }
+                                 }else
+                                    if(tipoElem==22){
+                                       infoStates.push(new Integer(0));
+                                       padresState.push(new Integer(0));
+                                       estate=57;
+                                       nivel++;
+                                       if(etapa<=6){
+                                          etapa=6;
+                                       }else{
+                                          String err="Los modulos se deben declarar una sola vez y solo despues de los archivos, las constantes, las variables, los arreglos y/o los registros, si los hay.";
+                                          editor.errCount++;
+                                          editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                                       }
+                                    }else
+                                       if(tipoElem==24){
+                                          estate=62;
+                                          if(etapa<=6){
+                                             etapa=7;
+                                          }else{
+                                             String err="El bloque Principal del programa solo se debe declarar una vez y solo al final de todas las otras declaraciones.";
+                                             editor.errCount++;
+                                             editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                                          }
+                                       }else{
+                                          String err="Código no previsto: "+lexema;
+                                          editor.errCount++;
+                                          editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                                          
+                                          estate=mError.recuperaPrograma();
+                                       }
+            }break;
+            //-------------------------------- ARCHIVOS --------------------------------
+            case 1:{
+                  if(tipoElem==2)
+                     estate=2;
+                  else{
+                     String err="Se esperaba un corchete de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     estate=mError.recuperaArchivos();
+                  }
+            }break;
+            case 2:{
+                  if(tipoElem==5){
+                     estate=3;
+                     existeLibreria();
+                  }else{
+                     String err="Se esperaba una cadena y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     estate=mError.recuperaArchivos();
+                  }
+            }break;
+            case 3:{
+                  if(tipoElem==3)
+                     estate=4;
+                  else
+                     if(tipoElem==4)
+                        estate=2;
+                     else{
+                        String err="Se esperaba una coma o un corchete de cierre y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        estate=mError.recuperaArchivos();
+                     }
+            }break;
+            case 4:{
+                  estate=0;
+                  reuse=true;
+            }break;
+            //----------------------------- Fin de ARCHIVOS ----------------------------
+            
+            //------------------------------- CONSTANTES -------------------------------
+            case 5:{
+                  if(tipoElem==2)
+                     estate=6;
+                  else{
+                     String err="Se esperaba un corchete de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaConstantes(tmp);
+                  }
+            }break;
+            case 6:{
+                  if(tipoElem==7)
+                     estate=7;
+                  else{
+                     String err="Se esperaba un identificador y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaConstantes(tmp);
+                  }
+            }break;
+            case 7:{
+                  if(tipoElem==8)
+                     estate=8;
+                  else{
+                     String err="Se esperaba el operador de asignacion (<-) y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaConstantes(tmp);
+                  }
+            }break;
+            case 8:{
+                  if(tipoElem==5||tipoElem==9||tipoElem==10||tipoElem==11)
+                     estate=9;
+                  else{
+                     String err="Se esperaba un valor y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaConstantes(tmp);
+                  }
+            }break;
+            case 9:{
+                  if(tipoElem==3)
+                     estate=10;
+                  else
+                     if(tipoElem==4)
+                        estate=6;
+                     else{
+                        String err="Se esperaba una coma o un corchete de cierre y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int tmp=((Integer)infoStates.peek()).intValue();
+                        estate=mError.recuperaConstantes(tmp);
+                     }
+            }break;
+            case 10:{
+                  /*estate=0;
+                  reuse=true;
+                  */
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  if(nivel>0)
+                     nivel--;
+            }break;
+            //--------------------------- Fin de CONSTANTES ----------------------------
+            
+            //------------------------------- VARIABLES --------------------------------
+            case 11:{
+                  if(tipoElem==2)
+                     estate=12;
+                  else{
+                     String err="Se esperaba un corchete de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaVariables(0,tmp);
+                  }
+            }break;
+            case 12:{
+                  if(tipoElem==14||tipoElem==15||tipoElem==16||tipoElem==17)
+                     estate=13;
+                  else{
+                     String err="Se esperaba un tipo de dato encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaVariables(0,tmp);
+                  }
+            }break;
+            case 13:{
+                  if(tipoElem==7)
+                     estate=14;
+                  else{
+                     String err="Se esperaba un identificador y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaVariables(0,tmp);
+                  }
+            }break;
+            case 14:{
+                  if(tipoElem==3)
+                     estate=15;
+                  else
+                     if(tipoElem==4)
+                        estate=13;
+                     else
+                        if(tipoElem==8)
+                           estate=16;
+                        else
+                           if(tipoElem==13)
+                              estate=12;
+                           else{
+                              String err="Se esperaba: \",\" ó \"]\" ó \";\" ó \"<-\" y se encontró: "+lexema;
+                              editor.errCount++;
+                              editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                              
+                              int tmp=((Integer)infoStates.peek()).intValue();
+                              estate=mError.recuperaVariables(1,tmp);
+                           }
+            }break;
+            case 15:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  if(nivel>0)
+                     nivel--;
+            }break;
+            case 16:{
+                  if(tipoElem==7)
+                     estate=18;
+                  else
+                     if(tipoElem==5||tipoElem==9||tipoElem==10||tipoElem==11)
+                        estate=17;
+                     else{
+                        String err="Se esperaba un identificador o un valor y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int tmp=((Integer)infoStates.peek()).intValue();
+                        estate=mError.recuperaVariables(1,tmp);
+                     }
+            }break;
+            case 17:{
+                  if(tipoElem==3)
+                     estate=15;
+                  else
+                     if(tipoElem==4)
+                        estate=13;
+                     else
+                        if(tipoElem==13)
+                           estate=12;
+                        else{
+                           String err="Se esperaba: \",\" ó \"]\" ó \";\" y se encontró: "+lexema;
+                           editor.errCount++;
+                           editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                           
+                           int tmp=((Integer)infoStates.peek()).intValue();
+                           estate=mError.recuperaVariables(1,tmp);
+                        }
+            }break;
+            case 18:{
+                  if(tipoElem==8)
+                     estate=16;
+                  else{
+                     String err="Se esperaba el operador de asignacion (<-) y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaVariables(1,tmp);
+                  }
+            }break;
+            //---------------------------- Fin de VARIABLES ----------------------------
+            
+            //-------------------------------- ARREGLOS --------------------------------
+            case 19:{
+                  if(tipoElem==2)
+                     estate=20;
+                  else{
+                     String err="Se esperaba un corchete de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaArreglos(0,tmp);
+                  }
+            }break;
+            case 20:{
+                  if(tipoElem==14||tipoElem==15||tipoElem==16||tipoElem==17)
+                     estate=21;
+                  else{
+                     String err="Se esperaba un tipo de dato y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaArreglos(0,tmp);
+                  }
+            }break;
+            case 21:{
+                  if(tipoElem==7)
+                     estate=22;
+                  else{
+                     String err="Se esperaba un identificador y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaArreglos(0,tmp);
+                  }
+            }break;
+            case 22:{
+                  if(tipoElem==19)
+                     estate=23;
+                  else{
+                     String err="Se esperaba una llave de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaArreglos(0,tmp);
+                  }
+            }break;
+            case 23:{
+                  if(tipoElem==9)
+                     estate=24;
+                  else{
+                     String err="Se esperaba un numero entero y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaArreglos(0,tmp);
+                  }
+            }break;
+            case 24:{
+                  if(tipoElem==20)
+                     estate=25;
+                  else
+                     if(tipoElem==4)
+                        estate=26;
+                     else{
+                        String err="Se esperaba una coma o una llave de cierre y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int tmp=((Integer)infoStates.peek()).intValue();
+                        estate=mError.recuperaArreglos(0,tmp);
+                     }
+            }break;
+            case 25:{
+                  if(tipoElem==3)
+                     estate=27;
+                  else
+                     if(tipoElem==4)
+                        estate=21;
+                     else
+                        if(tipoElem==8)
+                           estate=28;
+                        else
+                           if(tipoElem==13)
+                              estate=20;
+                           else{
+                              String err="Se esperaba: \",\" ó \"]\" ó \";\" ó \"<-\" y se encontró: "+lexema;
+                              editor.errCount++;
+                              editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                              
+                              int tmp=((Integer)infoStates.peek()).intValue();
+                              estate=mError.recuperaArreglos(2,tmp);
+                           }
+            }break;
+            case 26:{
+                  if(tipoElem==9)
+                     estate=32;
+                  else{
+                     String err="Se esperaba un numero entero y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaArreglos(17,tmp);
+                  }
+            }break;
+            case 27:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  if(nivel>0)
+                     nivel--;
+            }break;
+            case 28:{
+                  if(tipoElem==2)
+                     estate=29;
+                  else{
+                     String err="Se esperaba un corchete de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaArreglos(2,tmp);
+                  }
+            }break;
+            case 29:{
+                  if(tipoElem==5||tipoElem==9||tipoElem==10||tipoElem==11)
+                     estate=30;
+                  else{
+                     String err="Se esperaba un valor y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaArreglos(2,tmp);
+                  }
+            }break;
+            case 30:{
+                  if(tipoElem==3)
+                     estate=31;
+                  else
+                     if(tipoElem==4)
+                        estate=29;
+                     else{
+                        String err="Se esperaba una coma o un corchete de cierre y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int tmp=((Integer)infoStates.peek()).intValue();
+                        estate=mError.recuperaArreglos(2,tmp);
+                     }
+            }break;
+            case 31:{
+                  if(tipoElem==3)
+                     estate=27;
+                  else
+                     if(tipoElem==4)
+                        estate=21;
+                     else
+                        if(tipoElem==13)
+                           estate=20;
+                        else{
+                           String err="Se esperaba: \",\" ó \";\" ó \"]\" y se encontró: "+lexema;
+                           editor.errCount++;
+                           editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                           
+                           int tmp=((Integer)infoStates.peek()).intValue();
+                           estate=mError.recuperaArreglos(2,tmp);
+                        }
+            }break;
+            case 32:{
+                  if(tipoElem==20)
+                     estate=33;
+                  else{
+                     String err="Se esperaba una llave de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaArreglos(17,tmp);
+                  }
+            }break;
+            case 33:{
+                  if(tipoElem==3)
+                     estate=27;
+                  else
+                     if(tipoElem==4)
+                        estate=21;
+                     else
+                        if(tipoElem==8)
+                           estate=34;
+                        else
+                           if(tipoElem==13)
+                              estate=20;
+                           else{
+                              String err="Se esperaba: \",\" ó \";\" ó \"]\" ó \"<-\" y se encontró: "+lexema;
+                              editor.errCount++;
+                              editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                              
+                              int tmp=((Integer)infoStates.peek()).intValue();
+                              estate=mError.recuperaArreglos(17,tmp);
+                           }
+            }break;
+            case 34:{
+                  if(tipoElem==2)
+                     estate=35;
+                  else{
+                     String err="Se esperaba un corchete de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaArreglos(17,tmp);
+                  }
+            }break;
+            case 35:{
+                  if(tipoElem==2)
+                     estate=36;
+                  else{
+                     String err="Se esperaba un corchete de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaArreglos(17,tmp);
+                  }
+            }break;
+            case 36:{
+                  if(tipoElem==5||tipoElem==9||tipoElem==10||tipoElem==11)
+                     estate=37;
+                  else{
+                     String err="Se esperaba un valor y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaArreglos(17,tmp);
+                  }
+            }break;
+            case 37:{
+                  if(tipoElem==3)
+                     estate=38;
+                  else
+                     if(tipoElem==4)
+                        estate=36;
+                     else{
+                        String err="Se esperaba una coma o un corchete de cierre y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int tmp=((Integer)infoStates.peek()).intValue();
+                        estate=mError.recuperaArreglos(17,tmp);
+                     }
+            }break;
+            case 38:{
+                  if(tipoElem==3)
+                     estate=39;
+                  else
+                     if(tipoElem==4)
+                        estate=35;
+                     else{
+                        String err="Se esperaba una coma o un corchete de cierre y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int tmp=((Integer)infoStates.peek()).intValue();
+                        estate=mError.recuperaArreglos(17,tmp);
+                     }
+            }break;
+            case 39:{
+                  if(tipoElem==3)
+                     estate=27;
+                  else
+                     if(tipoElem==4)
+                        estate=21;
+                     else
+                        if(tipoElem==13)
+                           estate=20;
+                        else{
+                           String err="Se esperaba: \",\" ó \";\" ó \"]\" y se encontró: "+lexema;
+                           editor.errCount++;
+                           editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                           
+                           int tmp=((Integer)infoStates.peek()).intValue();
+                           estate=mError.recuperaArreglos(17,tmp);
+                        }
+            }break;
+            //----------------------------- Fin de ARREGLOS ----------------------------
+            
+            //-------------------------------- REGISTROS -------------------------------
+            case 40:{
+                  if(tipoElem==2)
+                     estate=41;
+                  else{
+                     String err="Se esperaba un corchete de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaRegistros(0,tmp);
+                  }
+            }break;
+            case 41:{
+                  if(tipoElem==7)
+                     estate=42;
+                  else{
+                     String err="Se esperaba un identificador y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaRegistros(0,tmp);
+                  }
+            }break;
+            case 42:{
+                  if(tipoElem==2)
+                     estate=43;
+                  else{
+                     String err="Se esperaba un corchete de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaRegistros(2,tmp);
+                  }
+            }break;
+            case 43:{
+                  if(tipoElem==14||tipoElem==15||tipoElem==16||tipoElem==17)
+                     estate=44;
+                  else{
+                     String err="Se esperaba un tipo de dato encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaRegistros(2,tmp);
+                  }
+            }break;
+            case 44:{
+                  if(tipoElem==7)
+                     estate=45;
+                  else{
+                     String err="Se esperaba un identificador y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaRegistros(2,tmp);
+                  }
+            }break;
+            case 45:{
+                  if(tipoElem==3)
+                     estate=46;
+                  else
+                     if(tipoElem==4)
+                        estate=44;
+                     else
+                        if(tipoElem==13)
+                           estate=43;
+                        else{
+                           String err="Se esperaba: \",\" ó \";\" ó \"]\" y se encontró: "+lexema;
+                           editor.errCount++;
+                           editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                           
+                           int tmp=((Integer)infoStates.peek()).intValue();
+                           estate=mError.recuperaRegistros(2,tmp);
+                        }
+            }break;
+            case 46:{
+                  if(tipoElem==3)
+                     estate=52;
+                  else
+                     if(tipoElem==19)
+                        estate=47;
+                     else
+                        if(tipoElem==13)
+                           estate=41;
+                        else{
+                           String err="Se esperaba: \";\" ó \"{\" ó \"]\" y se encontró: "+lexema;
+                           editor.errCount++;
+                           editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                           
+                           int tmp=((Integer)infoStates.peek()).intValue();
+                           estate=mError.recuperaRegistros(7,tmp);
+                        }
+            }break;
+            case 47:{
+                  if(tipoElem==9)
+                     estate=48;
+                  else{
+                     String err="Se esperaba un numero entero y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaRegistros(7,tmp);
+                  }
+            }break;
+            case 48:{
+                  if(tipoElem==20)
+                     estate=51;
+                  else
+                     if(tipoElem==4)
+                        estate=49;
+                     else{
+                        String err="Se esperaba una coma o una llave de cierre y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int tmp=((Integer)infoStates.peek()).intValue();
+                        estate=mError.recuperaRegistros(11,tmp);
+                     }
+            }break;
+            case 49:{
+                  if(tipoElem==9)
+                     estate=50;
+                  else{
+                     String err="Se esperaba un numero entero y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaRegistros(11,tmp);
+                  }
+            }break;
+            case 50:{
+                  if(tipoElem==20)
+                     estate=51;
+                  else{
+                     String err="Se esperaba un corchete de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaRegistros(1,tmp);
+                  }
+            }break;
+            case 51:{
+                  if(tipoElem==3)
+                     estate=52;
+                  else
+                     if(tipoElem==13)
+                        estate=41;
+                     else{
+                        String err="Se esperaba un punto y coma o un corchete de cierre y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int tmp=((Integer)infoStates.peek()).intValue();
+                        estate=mError.recuperaRegistros(1,tmp);
+                     }
+            }break;
+            case 52:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  if(nivel>0)
+                     nivel--;
+            }break;
+            //---------------------------- Fin de REGISTROS ----------------------------
+            
+            //------------------------------- PROTOTIPOS -------------------------------
+            case 53:{
+                  if(tipoElem==2)
+                     estate=54;
+                  else{
+                     String err="Se esperaba un corchete de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaPrototipos(tmp);
+                  }
+            }break;
+            case 54:{
+                  if(lexema.equals("PROCEDIMIENTO")){
+                     infoStates.push(new Integer(55));
+                     padresState.push(new Integer(55));
+                     //EncabezadoP
+                     estate=63;
+                     nivel++;
+                  }else
+                     if(lexema.equals("FUNCION")){
+                        infoStates.push(new Integer(55));
+                        padresState.push(new Integer(55));
+                        //EncabezadoF
+                        estate=67;
+                        nivel++;
+                     }else{
+                        String err="Se esperaba \"PROCEDIMIENTO\" o \"FUNCION\" y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int tmp=((Integer)infoStates.peek()).intValue();
+                        estate=mError.recuperaPrototipos(tmp);
+                     }
+            }break;
+            case 55:{
+                  if(tipoElem==3)
+                     estate=56;
+                  else
+                     if(tipoElem==13)
+                        estate=54;
+                     else{
+                        String err="Se esperaba un corchete de cierre o un punto y coma y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int tmp=((Integer)infoStates.peek()).intValue();
+                        estate=mError.recuperaPrototipos(tmp);
+                     }
+            }break;
+            case 56:{
+                  if(tipoElem==22){
+                     estate=57;
+                     nivel=1;
+                     modulosBan=true;
+                  }else{
+                     String err="Despues de los prototipos deben estar los Modulos.";
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     /*estate=0;
+                     reuse=true;
+                     */
+                     int next=((Integer)infoStates.pop()).intValue();
+                     padresState.pop();
+                     estate=next;
+                     reuse=true;
+                     if(nivel>0)
+                        nivel--;
+                  }
+            }break;
+            //---------------------------- Fin de PROTOTIPOS ---------------------------
+            
+            //--------------------------------- MODULOS --------------------------------
+            case 57:{
+                  if(tipoElem==2)
+                     estate=58;
+                  else{
+                     String err="Se esperaba un corchete de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaModulos(tmp);
+                  }
+            }break;
+            case 58:{
+                  if(lexema.equals("PROCEDIMIENTO")){
+                     infoStates.push(new Integer(59));
+                     padresState.push(new Integer(59));
+                     //EncabezadoP
+                     estate=63;
+                     nivel++;
+                  }else
+                     if(lexema.equals("FUNCION")){
+                        infoStates.push(new Integer(59));
+                        padresState.push(new Integer(59));
+                        //EncabezadoF
+                        estate=67;
+                        nivel++;
+                     }else{
+                        String err="Se esperaba \"PROCEDIMIENTO\" o \"FUNCION\" y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int tmp=((Integer)infoStates.peek()).intValue();
+                        estate=mError.recuperaModulos(tmp);
+                     }
+            }break;
+            case 59:{
+                  nivel++;
+                  //Cuerpo
+                  infoStates.push(new Integer(60));
+                  padresState.push(new Integer(59));
+                  estate=80;
+                  reuse=true;
+            }break;
+            case 60:{
+                  if(tipoElem==3)
+                     estate=61;
+                  else
+                     if(tipoElem==13)
+                        estate=58;
+                     else{
+                        String err="Se esperaba un corchete de cierre o un punto y coma y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int tmp=((Integer)infoStates.peek()).intValue();
+                        estate=mError.recuperaModulos(tmp);
+                     }
+            }break;
+            case 61:{
+                  /*estate=0;
+                  reuse=true;
+                  nivel--;
+                  */
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  if(nivel>0)
+                     nivel--;
+            }break;
+            //------------------------------ Fin de MODULOS ----------------------------
+            
+            //-------------------------------- PRINCIPAL -------------------------------
+            case 62:{
+                  etapa=7;
+                  //Cuerpo
+                  infoStates.push(new Integer(0));
+                  padresState.push(new Integer(0));
+                  estate=80;
+                  reuse=true;
+            }break;
+            //----------------------------- Fin de PRINCIPAL ---------------------------
+            
+            //------------------------------- EncabezadoP ------------------------------
+            case 211:{
+                  if(lexema.equals("PROCEDIMIENTO")){
+                     estate=63;
+                  }else{
+                     System.out.println(" *** Error: Elemento inesperado en la recuperacion de Encabezado *** ");
+                     estate=63;
+                  }
+            }break;
+            case 63:{
+                  if(tipoElem==7)
+                     estate=64;
+                  else{
+                     String err="Se esperaba un identificador y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaEncabezadoP(tmp);
+                  }
+            }break;
+            case 64:{
+                  if(tipoElem==19)
+                     estate=65;
+                  else{
+                     String err="Se esperaba una llave de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaEncabezadoP(tmp);
+                  }
+            }break;
+            case 65:{
+                  if(tipoElem==20){
+                     int next=((Integer)infoStates.pop()).intValue();
+                     padresState.pop();
+                     estate=next;
+                  }else
+                     if(tipoElem==14||tipoElem==15||tipoElem==16||tipoElem==17){
+                        infoStates.push(new Integer(66));
+                        padresState.push(new Integer(66));
+                        //Parametros
+                        estate=72;
+                        nivel++;
+                     }else{
+                        String err="Se esperaba un tipo de dato o una llave de cierre y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int tmp=((Integer)infoStates.peek()).intValue();
+                        estate=mError.recuperaEncabezadoP(tmp);
+                     }
+            }break;
+            case 66:{
+                  if(tipoElem==20){
+                     int next=((Integer)infoStates.pop()).intValue();
+                     padresState.pop();
+                     estate=next;
+                     nivel--;
+                  }else{
+                     String err="Se esperaba una llave de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaEncabezadoP(tmp);
+                  }
+            }break;
+            //---------------------------- Fin de EncabezadoP --------------------------
+            
+            //------------------------------- EncabezadoF ------------------------------
+            case 212:{
+                  if(lexema.equals("FUNCION")){
+                     estate=67;
+                  }else{
+                     System.out.println(" *** Error: Elemento inesperado en la recuperacion de Encabezado *** ");
+                     estate=67;
+                  }
+            }break;
+            case 67:{
+                  if(tipoElem==7)
+                     estate=68;
+                  else{
+                     String err="Se esperaba un identificador y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaEncabezadoF(tmp,0);
+                  }
+            }break;
+            case 68:{
+                  if(tipoElem==19)
+                     estate=69;
+                  else{
+                     String err="Se esperaba una llave de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaEncabezadoF(tmp,0);
+                  }
+            }break;
+            case 69:{
+                  if(tipoElem==20){
+                     estate=71;
+                  }else
+                     if(tipoElem==14||tipoElem==15||tipoElem==16||tipoElem==17){
+                        infoStates.push(new Integer(70));
+                        padresState.push(new Integer(70));
+                        //Parametros
+                        estate=72;
+                        nivel++;
+                     }else{
+                        String err="Se esperaba un tipo de dato o una llave de cierre y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int tmp=((Integer)infoStates.peek()).intValue();
+                        estate=mError.recuperaEncabezadoF(tmp,0);
+                     }
+            }break;
+            case 70:{
+                  if(tipoElem==20){
+                     estate=71;
+                  }else{
+                     String err="Se esperaba una llave de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaEncabezadoF(tmp,4);
+                  }
+            }break;
+            case 71:{
+                  if(tipoElem==14||tipoElem==15||tipoElem==16||tipoElem==17){
+                     int next=((Integer)infoStates.pop()).intValue();
+                     padresState.pop();
+                     estate=next;
+                     nivel--;
+                  }else{
+                     String err="Se esperaba un tipo de dato y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaEncabezadoF(tmp,4);
+                  }
+            }break;
+            //---------------------------- Fin de EncabezadoF --------------------------
+            
+            //-------------------------------- Parametros ------------------------------
+            case 72:{
+                  if(tipoElem==7)
+                     estate=73;
+                  else{
+                     String err="Se esperaba un identificador y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaParametros(tmp,0);
+                  }
+            }break;
+            case 73:{
+                  if(tipoElem==4)
+                     estate=72;
+                  else
+                     if(tipoElem==13)
+                        estate=79;
+                     else
+                        if(tipoElem==19)
+                           estate=74;
+                        else{
+                           int next=((Integer)infoStates.pop()).intValue();
+                           padresState.pop();
+                           estate=next;
+                           reuse=true;
+                           nivel--;
+                        }
+            }break;
+            case 74:{
+                  if(tipoElem==9)
+                     estate=75;
+                  else{
+                     String err="Se esperaba un numero entero y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaParametros(tmp,0);
+                  }
+            }break;
+            case 75:{
+                  if(tipoElem==4)
+                     estate=77;
+                  else
+                     if(tipoElem==20)
+                        estate=76;
+                     else{
+                        String err="Se esperaba una coma o una llave de cierre y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int tmp=((Integer)infoStates.peek()).intValue();
+                        estate=mError.recuperaParametros(tmp,1);
+                     }
+            }break;
+            case 76:{
+                  if(tipoElem==4)
+                     estate=72;
+                  else
+                     if(tipoElem==13)
+                        estate=79;
+                     else{
+                        int next=((Integer)infoStates.pop()).intValue();
+                        padresState.pop();
+                        estate=next;
+                        reuse=true;
+                        nivel--;
+                     }
+            }break;
+            case 77:{
+                  if(tipoElem==9)
+                     estate=78;
+                  else{
+                     String err="Se esperaba un numero entero y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaParametros(tmp,1);
+                  }
+            }break;
+            case 78:{
+                  if(tipoElem==20)
+                     estate=76;
+                  else{
+                     String err="Se esperaba una llave de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaParametros(tmp,0);
+                  }
+            }break;
+            case 79:{
+                  if(tipoElem==14||tipoElem==15||tipoElem==16||tipoElem==17)
+                     estate=72;
+                  else{
+                     String err="Se esperaba un tipo de dato y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int tmp=((Integer)infoStates.peek()).intValue();
+                     estate=mError.recuperaParametros(tmp,0);
+                  }
+            }break;
+            //----------------------------- Fin de Parametros --------------------------
+            
+            //---------------------------------- Cuerpo --------------------------------
+            case 80:{
+                  if(tipoElem==12){
+                     infoStates.push(new Integer(81));
+                     padresState.push(new Integer(84));
+                     estate=11;
+                  }else
+                     if(tipoElem==18){
+                        infoStates.push(new Integer(82));
+                        padresState.push(new Integer(84));
+                        estate=19;
+                     }else
+                        if(tipoElem==21){
+                           infoStates.push(new Integer(83));
+                           padresState.push(new Integer(84));
+                           estate=40;
+                        }else{
+                           //Bloque
+                           infoStates.push(new Integer(84));
+                           padresState.push(new Integer(84));
+                           estate=85;
+                           reuse=true;
+                           nivel++;
+                        }
+            }break;
+            case 81:{
+                  if(tipoElem==12){
+                     infoStates.push(new Integer(81));
+                     padresState.push(new Integer(84));
+                     estate=11;
+                     
+                     String err="Declaración repetida de variables.";
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                  }else
+                     if(tipoElem==18){
+                        infoStates.push(new Integer(82));
+                        padresState.push(new Integer(84));
+                        estate=19;
+                     }else
+                        if(tipoElem==21){
+                           infoStates.push(new Integer(83));
+                           padresState.push(new Integer(84));
+                           estate=40;
+                        }else{
+                           //Bloque
+                           infoStates.push(new Integer(84));
+                           padresState.push(new Integer(84));
+                           estate=85;
+                           reuse=true;
+                           nivel++;
+                        }
+            }break;
+            case 82:{
+                  if(tipoElem==12){
+                     infoStates.push(new Integer(81));
+                     padresState.push(new Integer(84));
+                     estate=11;
+                     
+                     String err="Las variables se deben declarar antes que los arreglos.";
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                  }else
+                     if(tipoElem==18){
+                        infoStates.push(new Integer(82));
+                        padresState.push(new Integer(84));
+                        estate=19;
+                        
+                        String err="Declaración repetida de arreglos.";
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     }else
+                        if(tipoElem==21){
+                           infoStates.push(new Integer(83));
+                           padresState.push(new Integer(84));
+                           estate=40;
+                        }else{
+                           //Bloque
+                           infoStates.push(new Integer(84));
+                           padresState.push(new Integer(84));
+                           estate=85;
+                           reuse=true;
+                           nivel++;
+                        }
+            }break;
+            case 83:{
+                  if(tipoElem==12){
+                     infoStates.push(new Integer(81));
+                     padresState.push(new Integer(84));
+                     estate=11;
+                     
+                     String err="Las variables se deben declarar antes que los registros.";
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                  }else
+                     if(tipoElem==18){
+                        infoStates.push(new Integer(82));
+                        padresState.push(new Integer(84));
+                        estate=19;
+                        
+                        String err="Los arreglos se deben declarar antes que los registros.";
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     }else
+                        if(tipoElem==21){
+                           infoStates.push(new Integer(83));
+                           padresState.push(new Integer(84));
+                           estate=40;
+                           
+                           String err="Declaración repetida de registros.";
+                           editor.errCount++;
+                           editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        }else{
+                           //Bloque
+                           infoStates.push(new Integer(84));
+                           padresState.push(new Integer(84));
+                           estate=85;
+                           reuse=true;
+                           nivel++;
+                        }
+            }break;
+            case 84:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  nivel--;
+            }break;
+            //------------------------------- Fin de Cuerpo ----------------------------
+            
+            //---------------------------------- Bloque --------------------------------
+            case 85:{
+                  //System.out.println("Sintaxis: Dentro de \"Bloque\": "+lexema);
+                  if(lexema.equals("INICIO"))
+                     estate=86;
+                  else{
+                     //Instruccion
+                     infoStates.push(new Integer(92));
+                     padresState.push(new Integer(92));
+                     estate=93;
+                     reuse=true;
+                     nivel++;
+                  }
+            }break;
+            case 86:{
+                  if(tipoElem==2)
+                     estate=87;
+                  else{
+                     String err="Se esperaba un corchete de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     //Posibles padres: Cuerpo,Si,Mientras,Hacer,Desde,Dependiendo
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaBloque(father);
+                     
+                     /*String father=damePadre(??);
+                     String arrThis=damePadreStrs(92);
+                     String arrPadre=damePadreStrs(??);*/
+                     //estate=mError.PanicoMayor("Bloque",);
+                  }
+            }break;
+            case 87:{
+                  //Instruccion
+                  infoStates.push(new Integer(88));
+                  padresState.push(new Integer(92));
+                  estate=93;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 88:{
+                  if(tipoElem==13)
+                     estate=89;
+                  else{
+                     String err="Se esperaba un punto y coma y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaBloque(father);
+                  }
+            }break;
+            case 89:{
+                  //Instruccion
+                  infoStates.push(new Integer(90));
+                  padresState.push(new Integer(92));
+                  estate=93;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 90:{
+                  if(tipoElem==3)
+                     estate=91;
+                  else
+                     if(tipoElem==13)
+                        estate=89;
+                     else{
+                        String err="Se esperaba un corchete de cierre o un punto y coma y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int father=((Integer)padresState.peek()).intValue();
+                        estate=mError.recuperaBloque(father);
+                     }
+            }break;
+            case 91:{
+                  if(lexema.equals("FIN"))
+                     estate=92;
+                  else{
+                     String err="Se esperaba la palabra \"FIN\" y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaBloque(father);
+                  }
+            }break;
+            case 92:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  nivel--;
+            }break;
+            //------------------------------- Fin de Bloque ----------------------------
+            
+            //-------------------------------- Instruccion -----------------------------
+            case 93:{
+                  /*for(int n=0;n<nivel;n++)
+                     System.out.print("\t");
+                  /*System.out.print("Pila:");
+                  for(int n=0;n<infoStates.size();n++){
+                     int t=((Integer)infoStates.get(n)).intValue();
+                     System.out.print(" "+t);
+                  }*/
+                  //System.out.println(" ");
+                  
+                  if(tipoElem==7)
+                     estate=94;
+                  else if(lexema.equals("SI"))
+                     estate=102;
+                  else if(lexema.equals("MIENTRAS"))
+                     estate=103;
+                  else if(lexema.equals("HACER"))
+                     estate=104;
+                  else if(lexema.equals("DESDE"))
+                     estate=105;
+                  else if(lexema.equals("DEPENDIENDO"))
+                     estate=106;
+                  else if(lexema.equals("REGRESAR"))
+                     estate=107;
+                  else if(lexema.equals("LEER"))
+                     estate=111;
+                  else if(lexema.equals("ESCRIBIR"))
+                     estate=112;
+                  else if(lexema.equals("ESCRIBIRCSL"))
+                     estate=116;
+                  else if(lexema.equals("DTPT")||lexema.equals("LPPT"))
+                     estate=120;
+                  else{
+                     String err="Elemento invalido para iniciar una instrucción: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaInstruccion(father);
+                  }
+            }break;
+            case 94:{
+                  if(tipoElem==25)
+                     estate=95;
+                  else
+                     if(tipoElem==8)
+                        estate=98;
+                     else
+                        if(tipoElem==2)
+                           estate=99;
+                        else
+                           if(tipoElem==19)
+                              estate=100;
+                           else{
+                              String err="Se esperaba \"(\" ó \"[\" ó \"{\" ó \"<-\" y se encontró: "+lexema;
+                              editor.errCount++;
+                              editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                              
+                              int father=((Integer)padresState.peek()).intValue();
+                              estate=mError.recuperaInstruccionIdent(father);
+                           }
+            }break;
+            case 95:{
+                  if(tipoElem==26)
+                     estate=101;
+                  else{
+                     //Parametros_Identificador
+                     infoStates.push(new Integer(96));
+                     padresState.push(new Integer(95));
+                     estate=220;
+                     reuse=true;
+                     nivel++;
+                  }
+            }break;
+            case 96:{
+                  if(tipoElem==26)
+                     estate=101;
+                  else{
+                     String err="Se esperaba un parentesis de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaInstruccionIdent(father);
+                  }
+            }break;
+            case 97:{
+                  //Fue reemplazado por el caso de aceptación 101
+            }break;
+            case 98:{
+                  //Asignacion Simple
+                  infoStates.push(new Integer(101));
+                  padresState.push(new Integer(95));
+                  estate=155;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 99:{
+                  //Asignacion Registro
+                  infoStates.push(new Integer(101));
+                  padresState.push(new Integer(95));
+                  estate=157;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 100:{
+                  //Asignacion Arreglo
+                  infoStates.push(new Integer(101));
+                  padresState.push(new Integer(95));
+                  estate=167;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 101:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  nivel--;
+            }break;
+            case 102:{
+                  //SI
+                  infoStates.push(new Integer(101));
+                  padresState.push(new Integer(111));
+                  estate=122;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 103:{
+                  //Mientras
+                  infoStates.push(new Integer(101));
+                  padresState.push(new Integer(111));
+                  estate=127;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 104:{
+                  //Hacer
+                  infoStates.push(new Integer(101));
+                  padresState.push(new Integer(111));
+                  estate=130;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 105:{
+                  //Desde
+                  infoStates.push(new Integer(101));
+                  padresState.push(new Integer(111));
+                  estate=134;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 106:{
+                  //Dependiendo
+                  infoStates.push(new Integer(101));
+                  padresState.push(new Integer(111));
+                  estate=144;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 107:{
+                  //Regresar
+                  if(tipoElem==25)
+                     estate=108;
+                  else{
+                     String err="Se esperaba un parentesis de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaInstruccionReturn(father);
+                  }
+            }break;
+            case 108:{
+                  //Regla_OR
+                  infoStates.push(new Integer(109));
+                  padresState.push(new Integer(109));
+                  estate=222;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 109:{
+                  if(tipoElem==26)
+                     estate=101;
+                  else{
+                     String err="Se esperaba un parentesis de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaInstruccionReturn(father);
+                  }
+            }break;
+            case 110:{
+                  //Fue reemplazado por el caso de aceptación 101
+            }break;
+            case 111:{
+                  //Leer
+                  infoStates.push(new Integer(101));
+                  padresState.push(new Integer(111));
+                  estate=183;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 112:{
+                  //Escribir
+                  if(tipoElem==25)
+                     estate=113;
+                  else{
+                     String err="Se esperaba un parentesis de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaInstruccionWrite(father);
+                  }
+            }break;
+            case 113:{
+                  //Parametros_Identificador
+                  infoStates.push(new Integer(114));
+                  padresState.push(new Integer(114));
+                  estate=220;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 114:{
+                  if(tipoElem==26)
+                     estate=101;
+                  else{
+                     String err="Se esperaba un parentesis de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaInstruccionWrite(father);
+                  }
+            }break;
+            case 115:{
+                  //Fue reemplazado por el caso de aceptación 101
+            }break;
+            case 116:{
+                  //EscribirCSL
+                  if(tipoElem==25)
+                     estate=117;
+                  else{
+                     String err="Se esperaba un parentesis de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaInstruccionWriteLN(father);
+                  }
+            }break;
+            case 117:{
+                  if(tipoElem==26)
+                     estate=101;
+                  else{
+                     //Parametros_Identificador
+                     infoStates.push(new Integer(118));
+                     padresState.push(new Integer(118));
+                     estate=220;
+                     reuse=true;
+                     nivel++;
+                  }
+            }break;
+            case 118:{
+                  if(tipoElem==26)
+                     estate=101;
+                  else{
+                     String err="Se esperaba un parentesis de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaInstruccionWriteLN(father);
+                  }
+            }break;
+            case 119:{
+                  //Fue reemplazado por el caso de aceptación 101
+            }break;
+            case 120:{
+                  if(tipoElem==25)
+                     estate=121;
+                  else{
+                     String err="Se esperaba un parentesis de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaInstruccionPT(father);
+                  }
+            }break;
+            case 121:{
+                  if(tipoElem==26)
+                     estate=101;
+                  else{
+                     String err="Se esperaba un parentesis de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaInstruccionPT(father);
+                  }
+            }break;
+            //----------------------------- Fin de Instruccion -------------------------
+            
+            //------------------------------------ SI ----------------------------------
+            case 213:{
+                  if(lexema.equals("SI"))
+                     estate=122;
+                  else{
+                     //vacio
+                  }
+            }break;
+            case 122:{
+                  //Regla_OR
+                  infoStates.push(new Integer(123));
+                  padresState.push(new Integer(123));
+                  estate=222;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 123:{
+                  //Bloque
+                  infoStates.push(new Integer(124));
+                  padresState.push(new Integer(123));
+                  estate=85;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 124:{
+                  if(lexema.equals("SINO"))
+                     estate=125;
+                  else
+                     if(lexema.equals("SINOSI"))
+                        estate=122;
+                     else{
+                        int next=((Integer)infoStates.pop()).intValue();
+                        padresState.pop();
+                        estate=next;
+                        reuse=true;
+                        nivel--;
+                     }
+            }break;
+            case 125:{
+                  //Bloque
+                  infoStates.push(new Integer(126));
+                  padresState.push(new Integer(123));
+                  estate=85;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 126:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  nivel--;
+            }break;
+            //--------------------------------- Fin de SI ------------------------------
+            
+            //--------------------------------- Mientras -------------------------------
+            case 214:{
+                  if(lexema.equals("MIENTRAS"))
+                     estate=127;
+                  else{
+                     //vacio
+                  }
+            }break;
+            case 127:{
+                  //Regla_OR
+                  infoStates.push(new Integer(128));
+                  padresState.push(new Integer(128));
+                  estate=222;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 128:{
+                  //Bloque
+                  infoStates.push(new Integer(129));
+                  padresState.push(new Integer(128));
+                  estate=85;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 129:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  nivel--;
+            }break;
+            //------------------------------ Fin de Mientras ---------------------------
+            
+            //----------------------------------- Hacer --------------------------------
+            case 215:{
+                  if(lexema.equals("HACER"))
+                     estate=130;
+                  else{
+                     //vacio
+                  }
+            }break;
+            case 130:{
+                  //Bloque
+                  infoStates.push(new Integer(131));
+                  padresState.push(new Integer(131));
+                  estate=85;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 131:{
+                  if(lexema.equals("HASTA"))
+                     estate=132;
+                  else{
+                     String err="Se esperaba la palabra \"HASTA\" y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaHacer(father);
+                  }
+            }break;
+            case 132:{
+                  //Regla_OR
+                  infoStates.push(new Integer(133));
+                  padresState.push(new Integer(131));
+                  estate=222;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 133:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  nivel--;
+            }break;
+            //-------------------------------- Fin de Hacer ----------------------------
+            
+            //----------------------------------- Desde --------------------------------
+            case 216:{
+                  if(lexema.equals("DESDE"))
+                     estate=134;
+                  else{
+                     //vacio
+                  }
+            }break;
+            case 134:{
+                  if(tipoElem==7)
+                     estate=135;
+                  else{
+                     String err="Se esperaba un identificador y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaDesde(father,0);
+                  }
+            }break;
+            case 135:{
+                  if(tipoElem==19)
+                     estate=136;
+                  else{
+                     String err="Se esperaba una llave de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaDesde(father,0);
+                  }
+            }break;
+            case 136:{
+                  //Expresion
+                  infoStates.push(new Integer(137));
+                  padresState.push(new Integer(137));
+                  estate=197;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 137:{
+                  if(tipoElem==4)
+                     estate=138;
+                  else{
+                     String err="Se esperaba una coma y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaDesde(father,11);
+                  }
+            }break;
+            case 138:{
+                  //Expresion
+                  infoStates.push(new Integer(139));
+                  padresState.push(new Integer(137));
+                  estate=197;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 139:{
+                  if(tipoElem==20)
+                     estate=140;
+                  else{
+                     String err="Se esperaba una llave de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaDesde(father,11);
+                  }
+            }break;
+            case 140:{
+                  if(lexema.equals("INC")||lexema.equals("DEC"))
+                     estate=141;
+                  else{
+                     //Bloque
+                     infoStates.push(new Integer(143));
+                     padresState.push(new Integer(137));
+                     estate=85;
+                     reuse=true;
+                     nivel++;
+                  }
+            }break;
+            case 141:{
+                  if(tipoElem==9)
+                     estate=142;
+                  else{
+                     String err="Se esperaba un entero y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaDesde(father,11);
+                  }
+            }break;
+            case 142:{
+                  //Bloque
+                  infoStates.push(new Integer(143));
+                  padresState.push(new Integer(137));
+                  estate=85;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 143:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  nivel--;
+            }break;
+            //-------------------------------- Fin de Desde ----------------------------
+            
+            //-------------------------------- Dependiendo -----------------------------
+            case 217:{
+                  if(lexema.equals("DEPENDIENDO"))
+                     estate=144;
+                  else{
+                     //vacio
+                  }
+            }break;
+            case 144:{
+                  if(tipoElem==7)
+                     estate=145;
+                  else{
+                     String err="Se esperaba un identificador y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaDependiendo(father,0);
+                  }
+            }break;
+            case 145:{
+                  if(tipoElem==2)
+                     estate=146;
+                  else{
+                     String err="Se esperaba un corchete de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaDependiendo(father,2);
+                  }
+            }break;
+            case 146:{
+                  if(lexema.equals("CASO"))
+                     estate=147;
+                  else{
+                     String err="Se esperaba la palabra \"CASO\" y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaDependiendo(father,2);
+                  }
+            }break;
+            case 147:{
+                  if(tipoElem==7||tipoElem==5||tipoElem==9||tipoElem==10||tipoElem==11)
+                     estate=148;
+                  else{
+                     String err="Se esperaba un identificador o un valor y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaDependiendo(father,2);
+                  }
+            }break;
+            case 148:{
+                  if(lexema.equals("|"))
+                     estate=147;
+                  else{
+                     //Bloque
+                     infoStates.push(new Integer(149));
+                     padresState.push(new Integer(149));
+                     estate=85;
+                     reuse=true;
+                     nivel++;
+                  }
+            }break;
+            case 149:{
+                  if(tipoElem==13)
+                     estate=150;
+                  else
+                     if(tipoElem==3)
+                        estate=154;
+                     else{
+                        String err="Se esperaba \";\" ó \"]\" y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int father=((Integer)padresState.peek()).intValue();
+                        estate=mError.recuperaDependiendo(father,2);
+                     }
+            }break;
+            case 150:{
+                  if(lexema.equals("CASO"))
+                     estate=147;
+                  else
+                     if(lexema.equals("CUALQUIER"))
+                        estate=151;
+                     else{
+                        String err="Se esperaba la palabra \"CASO\" ó \"CUALQUIER\" y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int father=((Integer)padresState.peek()).intValue();
+                        estate=mError.recuperaDependiendo(father,2);
+                     }
+            }break;
+            case 151:{
+                  if(lexema.equals("OTRO"))
+                     estate=152;
+                  else{
+                     String err="Se esperaba la palabra \"OTRO\" y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaDependiendo(father,2);
+                  }
+            }break;
+            case 152:{
+                  //Bloque
+                  infoStates.push(new Integer(153));
+                  padresState.push(new Integer(149));
+                  estate=85;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 153:{
+                  if(tipoElem==3)
+                     estate=154;
+                  else{
+                     String err="Se esperaba un corchete de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaDependiendo(father,2);
+                  }
+            }break;
+            case 154:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  nivel--;
+            }break;
+            //----------------------------- Fin de Dependiendo -------------------------
+            
+            //------------------------------ Asignacion Simple -------------------------
+            case 230:{
+                  if(lexema.equals("<-"))
+                     estate=155;
+                  else{
+                     //vacio
+                  }
+            }break;
+            case 155:{
+                  //Regla_OR
+                  infoStates.push(new Integer(156));
+                  padresState.push(new Integer(156));
+                  estate=222;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 156:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  nivel--;
+            }break;
+            //--------------------------- Fin de Asignacion Simple ---------------------
+            
+            //----------------------------- Asignacion Registro ------------------------
+            case 231:{
+                  if(lexema.equals("["))
+                     estate=157;
+                  else{
+                     //vacio
+                  }
+            }break;
+            case 157:{
+                  if(tipoElem==7)
+                     estate=158;
+                  else{
+                     String err="Se esperaba un identificador y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaAsignacionReg(father,0);
+                  }
+            }break;
+            case 158:{
+                  if(tipoElem==3)
+                     estate=159;
+                  else{
+                     String err="Se esperaba un corchete de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaAsignacionReg(father,0);
+                  }
+            }break;
+            case 159:{
+                  if(tipoElem==19)
+                     estate=160;
+                  else
+                     if(tipoElem==8)
+                        estate=165;
+                     else{
+                        String err="Se esperaba una llave de apertura ó \"<-\" y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int father=((Integer)padresState.peek()).intValue();
+                        estate=mError.recuperaAsignacionReg(father,0);
+                     }
+            }break;
+            case 160:{
+                  //Expresion
+                  infoStates.push(new Integer(161));
+                  padresState.push(new Integer(166));
+                  estate=197;
+                  reuse=true;
+                  nivel++;
+                  
+                  /*if(tipoElem==9)
+                     estate=161;
+                  else{
+                     String err="Se esperaba un entero y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win);
+                  }*/
+            }break;
+            case 161:{
+                  if(tipoElem==20)
+                     estate=164;
+                  else
+                     if(tipoElem==4)
+                        estate=162;
+                     else{
+                        String err="Se esperaba una llave de cierre o una coma y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int father=((Integer)padresState.peek()).intValue();
+                        estate=mError.recuperaAsignacionReg(father,8);
+                     }
+            }break;
+            case 162:{
+                  //Expresion
+                  infoStates.push(new Integer(163));
+                  padresState.push(new Integer(166));
+                  estate=197;
+                  reuse=true;
+                  nivel++;
+                  
+                  /*if(tipoElem==9)
+                     estate=163;
+                  else{
+                     String err="Se esperaba un entero y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win);
+                  }*/
+            }break;
+            case 163:{
+                  if(tipoElem==20)
+                     estate=164;
+                  else{
+                     String err="Se esperaba una llave de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaAsignacionReg(father,8);
+                  }
+            }break;
+            case 164:{
+                  if(tipoElem==8)
+                     estate=165;
+                  else{
+                     String err="Se esperaba el operador de asignación y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaAsignacionReg(father,8);
+                  }
+            }break;
+            case 165:{
+                  //Regla_OR
+                  infoStates.push(new Integer(166));
+                  padresState.push(new Integer(166));
+                  estate=222;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 166:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  nivel--;
+            }break;
+            //-------------------------- Fin de Asignacion Registro --------------------
+            
+            //----------------------------- Asignacion Arreglo -------------------------
+            case 232:{
+                  if(lexema.equals("{"))
+                     estate=167;
+                  else{
+                     //vacio
+                  }
+            }break;
+            case 167:{
+                  if(tipoElem==20)
+                     estate=174;
+                  else{
+                     //Expresion
+                     infoStates.push(new Integer(168));
+                     padresState.push(new Integer(173));
+                     estate=197;
+                     reuse=true;
+                     nivel++;
+                  }
+            }break;
+            case 168:{
+                  if(tipoElem==20)
+                     estate=171;
+                  else
+                     if(tipoElem==4)
+                        estate=169;
+                     else{
+                        String err="Se esperaba una llave de cierre o una coma y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int father=((Integer)padresState.peek()).intValue();
+                        estate=mError.recuperaAsignacionArr(father,8);
+                     }
+            }break;
+            case 169:{
+                  //Expresion
+                  infoStates.push(new Integer(170));
+                  padresState.push(new Integer(173));
+                  estate=197;
+                  reuse=true;
+                  nivel++;
+                  
+                  /*if(tipoElem==9)
+                     estate=170;
+                  else{
+                     String err="Se esperaba un entero y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win);
+                  }*/
+            }break;
+            case 170:{
+                  if(tipoElem==20)
+                     estate=171;
+                  else{
+                     String err="Se esperaba una llave de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaAsignacionArr(father,8);
+                  }
+            }break;
+            case 171:{
+                  if(tipoElem==8)
+                     estate=172;
+                  else{
+                     String err="Se esperaba el operador de asignación y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaAsignacionArr(father,8);
+                  }
+            }break;
+            case 172:{
+                  //Regla_OR
+                  infoStates.push(new Integer(173));
+                  padresState.push(new Integer(173));
+                  estate=222;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 173:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  nivel--;
+            }break;
+            case 174:{
+                  if(tipoElem==8)
+                     estate=175;
+                  else{
+                     String err="Se esperaba el operador de asignación y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaAsignacionArr(father,25);
+                  }
+            }break;
+            case 175:{
+                  if(tipoElem==2)
+                     estate=176;
+                  else{
+                     String err="Se esperaba un corchete de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaAsignacionArr(father,19);
+                  }
+            }break;
+            case 176:{
+                  if(tipoElem==5||tipoElem==9||tipoElem==10||tipoElem==11)
+                     estate=177;
+                  else
+                     if(tipoElem==2)
+                        estate=178;
+                     else{
+                        String err="Se esperaba un corchete de apertura o un valor y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int father=((Integer)padresState.peek()).intValue();
+                        estate=mError.recuperaAsignacionArr(father,8);
+                     }
+            }break;
+            case 177:{
+                  if(tipoElem==4)
+                     estate=209;
+                  else
+                     if(tipoElem==3)
+                        estate=182;
+                     else{
+                        String err="Se esperaba un corchete de cierre o una coma y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int father=((Integer)padresState.peek()).intValue();
+                        estate=mError.recuperaAsignacionArr(father,19);
+                     }
+            }break;
+            case 209:{
+                  if(tipoElem==5||tipoElem==9||tipoElem==10||tipoElem==11)
+                     estate=177;
+                  else{
+                     String err="Se esperaba un valor y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaAsignacionArr(father,19);
+                  }
+            }break;
+            case 178:{
+                  if(tipoElem==5||tipoElem==9||tipoElem==10||tipoElem==11)
+                     estate=179;
+                  else{
+                     String err="Se esperaba un valor y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaAsignacionArr(father,25);
+                  }
+            }break;
+            case 179:{
+                  if(tipoElem==4)
+                     estate=178;
+                  else
+                     if(tipoElem==3)
+                        estate=181;
+                     else{
+                        String err="Se esperaba un corchete de cierre o una coma y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int father=((Integer)padresState.peek()).intValue();
+                        estate=mError.recuperaAsignacionArr(father,25);
+                     }
+            }break;
+            case 180:{
+                  if(tipoElem==2)
+                     estate=178;
+                  else{
+                     String err="Se esperaba un corchete de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaAsignacionArr(father,25);
+                  }
+            }break;
+            case 181:{
+                  if(tipoElem==3)
+                     estate=182;
+                  else
+                     if(tipoElem==4)
+                        estate=180;
+                     else{
+                        String err="Se esperaba un corchete de cierre o una coma y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int father=((Integer)padresState.peek()).intValue();
+                        estate=mError.recuperaAsignacionArr(father,25);
+                     }
+            }break;
+            case 182:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  nivel--;
+            }break;
+            //-------------------------- Fin de Asignacion Arreglo ---------------------
+            
+            //----------------------------------- Leer ---------------------------------
+            case 183:{
+                  if(tipoElem==25)
+                     estate=184;
+                  else{
+                     String err="Se esperaba un parentesis de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaLeer(father,0);
+                  }
+            }break;
+            case 184:{
+                  if(tipoElem==7)
+                     estate=185;
+                  else{
+                     String err="Se esperaba un identificador y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaLeer(father,0);
+                  }
+            }break;
+            case 185:{
+                  if(tipoElem==2)
+                     estate=186;
+                  else
+                     if(tipoElem==4)
+                        estate=184;
+                     else
+                        if(tipoElem==26)
+                           estate=190;
+                        else{
+                           //Dimensiones_Identificador
+                           infoStates.push(new Integer(189));
+                           padresState.push(new Integer(189));
+                           estate=191;
+                           reuse=true;
+                           nivel++;
+                        }
+            }break;
+            case 186:{
+                  if(tipoElem==7)
+                     estate=187;
+                  else{
+                     String err="Se esperaba un identificador y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaLeer(father,0);
+                  }
+            }break;
+            case 187:{
+                  if(tipoElem==3)
+                     estate=188;
+                  else{
+                     String err="Se esperaba un corchete de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaLeer(father,0);
+                  }
+            }break;
+            case 188:{
+                  if(tipoElem==4)
+                     estate=184;
+                  else
+                     if(tipoElem==26)
+                        estate=190;
+                     else{
+                        //Dimensiones_Identificador
+                        infoStates.push(new Integer(189));
+                        padresState.push(new Integer(189));
+                        estate=191;
+                        reuse=true;
+                        nivel++;
+                     }
+            }break;
+            case 189:{
+                  if(tipoElem==4)
+                     estate=184;
+                  else
+                     if(tipoElem==26)
+                        estate=190;
+                     else{
+                        String err="Se esperaba \",\" ó \")\" y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int father=((Integer)padresState.peek()).intValue();
+                        estate=mError.recuperaLeer(father,0);
+                     }
+            }break;
+            case 190:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  nivel--;
+            }break;
+            //-------------------------------- Fin de Leer -----------------------------
+            
+            //-------------------------- Dimensiones Identificador ---------------------
+            case 191:{
+                  if(tipoElem==19)
+                     estate=192;
+                  else{
+                     String err="Se esperaba una llave de apertura y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaDimensiones_Ident(father,0);
+                  }
+            }break;
+            case 192:{
+                  //Expresion
+                  infoStates.push(new Integer(193));
+                  padresState.push(new Integer(193));
+                  estate=197;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 193:{
+                  if(tipoElem==20)
+                     estate=196;
+                  else
+                     if(tipoElem==4)
+                        estate=194;
+                     else{
+                        String err="Se esperaba una llave de cierre o una coma y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int father=((Integer)padresState.peek()).intValue();
+                        estate=mError.recuperaDimensiones_Ident(father,9);
+                     }
+            }break;
+            case 194:{
+                  //Expresion
+                  infoStates.push(new Integer(195));
+                  padresState.push(new Integer(193));
+                  estate=197;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 195:{
+                  if(tipoElem==20)
+                     estate=196;
+                  else{
+                     String err="Se esperaba una llave de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaDimensiones_Ident(father,9);
+                  }
+            }break;
+            case 196:{
+                  int next=((Integer)infoStates.pop()).intValue();
+                  padresState.pop();
+                  estate=next;
+                  reuse=true;
+                  nivel--;
+            }break;
+            //----------------------- Fin de Dimensiones Identificador -----------------
+            
+            //--------------------------------- Expresion ------------------------------
+            case 197:{
+                  if(lexema.equals("+")||lexema.equals("-"))
+                     estate=198;
+                  else
+                     if(tipoElem==5||tipoElem==9||tipoElem==10||tipoElem==11)
+                        estate=199;
+                     else
+                        if(tipoElem==25)
+                           estate=200;
+                        else
+                           if(tipoElem==7)
+                              estate=202;
+                           else{
+                              String err="Se esperaba \"+\" ó \"-\" ó \"(\" o un valor o un identificador y se encontró: "+lexema;
+                              editor.errCount++;
+                              editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                              
+                              int father=((Integer)padresState.peek()).intValue();
+                              estate=mError.recuperaExpresion(father,0);
+                           }
+            }break;
+            case 198:{
+                  if(tipoElem==5||tipoElem==9||tipoElem==10||tipoElem==11)
+                     estate=199;
+                  else
+                     if(tipoElem==7)
+                        estate=202;
+                     else{
+                        String err="Se esperaba un valor o un identificador y se encontró: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        int father=((Integer)padresState.peek()).intValue();
+                        estate=mError.recuperaExpresion(father,3);
+                     }
+            }break;
+            case 199:{
+                  if(lexema.equals("+")||lexema.equals("-")||lexema.equals("*")||lexema.equals("/")||lexema.equals("DIV")||lexema.equals("MOD")||lexema.equals("POT"))
+                     estate=197;
+                  else{
+                     int next=((Integer)infoStates.pop()).intValue();
+                     padresState.pop();
+                     estate=next;
+                     reuse=true;
+                     nivel--;
+                  }
+            }break;
+            case 200:{
+                  //Regla_OR
+                  infoStates.push(new Integer(201));
+                  padresState.push(new Integer(201));
+                  estate=222;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 201:{
+                  if(tipoElem==26)
+                     estate=199;
+                  else{
+                     String err="Se esperaba un parentesis de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaExpresion(father,15);
+                  }
+            }break;
+            case 202:{
+                  if(tipoElem==25)
+                     estate=203;
+                  else
+                     if(tipoElem==2)
+                        estate=206;
+                     else
+                        if(tipoElem==19){
+                           //Dimensiones_Identificador
+                           infoStates.push(new Integer(204));
+                           padresState.push(new Integer(201));
+                           estate=191;
+                           reuse=true;
+                           nivel++;
+                        }else
+                           if(lexema.equals("+")||lexema.equals("-")||lexema.equals("*")||lexema.equals("/")||lexema.equals("DIV")||lexema.equals("MOD")||lexema.equals("POT"))
+                              estate=197;
+                           else{
+                              int next=((Integer)infoStates.pop()).intValue();
+                              padresState.pop();
+                              estate=next;
+                              reuse=true;
+                              nivel--;
+                           }
+            }break;
+            case 203:{
+                  if(tipoElem==26)
+                     estate=204;
+                  else{
+                     //Parametros_Identificador
+                     infoStates.push(new Integer(205));
+                     padresState.push(new Integer(201));
+                     estate=220;
+                     reuse=true;
+                     nivel++;
+                  }
+            }break;
+            case 204:{
+                  if(lexema.equals("+")||lexema.equals("-")||lexema.equals("*")||lexema.equals("/")||lexema.equals("DIV")||lexema.equals("MOD")||lexema.equals("POT"))
+                     estate=197;
+                  else{
+                     int next=((Integer)infoStates.pop()).intValue();
+                     padresState.pop();
+                     estate=next;
+                     reuse=true;
+                     nivel--;
+                  }
+            }break;
+            case 205:{
+                  if(tipoElem==26)
+                     estate=204;
+                  else{
+                     String err="Se esperaba un parentesis de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaExpresion(father,15);
+                  }
+            }break;
+            case 206:{
+                  if(tipoElem==7)
+                     estate=207;
+                  else{
+                     String err="Se esperaba un identificador y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaExpresion(father,12);
+                  }
+            }break;
+            case 207:{
+                  if(tipoElem==3)
+                     estate=208;
+                  else{
+                     String err="Se esperaba un corchete de cierre y se encontró: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     int father=((Integer)padresState.peek()).intValue();
+                     estate=mError.recuperaExpresion(father,12);
+                  }
+            }break;
+            case 208:{
+                  if(tipoElem==19){
+                     //Dimensiones_Identificador
+                     infoStates.push(new Integer(204));
+                     padresState.push(new Integer(201));
+                     estate=191;
+                     reuse=true;
+                     nivel++;
+                  }else
+                     if(lexema.equals("+")||lexema.equals("-")||lexema.equals("*")||lexema.equals("/")||lexema.equals("DIV")||lexema.equals("MOD")||lexema.equals("POT"))
+                        estate=197;
+                     else{
+                        int next=((Integer)infoStates.pop()).intValue();
+                        padresState.pop();
+                        estate=next;
+                        reuse=true;
+                        nivel--;
+                     }
+            }break;
+            //------------------------------ Fin de Expresion --------------------------
+            case 210:{
+                  //El caso 209 se usa en el bloque de Asignacion Arreglo
+                  //Los casos 211 y 212 se usan en EncabezadoP y EncabezadoF
+                  //Los casos 213 al 217 se usan en las estructuras de control
+                  //Los casos 230 al 232 se usan en las asignaciones
+                  
+                  /*
+                   * Los casos 218, 219 y del 233 al 249 se dejaran sin usarse para tener
+                   * casos libres por si se modifica la regla Expresion o si otra regla 
+                   * los necesita
+                  */
+            }break;
+            //--------------------------- Parametros Identificador ---------------------
+            case 220:{
+                  //Regla_OR
+                  infoStates.push(new Integer(221));
+                  padresState.push(new Integer(221));
+                  estate=222;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 221:{
+                  if(tipoElem==4)
+                     estate=220;
+                  else{
+                     int next=((Integer)infoStates.pop()).intValue();
+                     padresState.pop();
+                     estate=next;
+                     reuse=true;
+                     nivel--;
+                  }
+            }break;
+            //------------------------ Fin de Parametros Identificador -----------------
+            
+            //--------------------------------- Regla_OR -------------------------------
+            case 222:{
+                  if(lexema.equals("!"))
+                     estate=223;
+                  else{
+                     //Expresion
+                     infoStates.push(new Integer(224));
+                     padresState.push(new Integer(224));
+                     estate=197;
+                     reuse=true;
+                     nivel++;
+                  }
+            }break;
+            case 223:{
+                  //Expresion
+                  infoStates.push(new Integer(224));
+                  padresState.push(new Integer(224));
+                  estate=197;
+                  reuse=true;
+                  nivel++;
+            }break;
+            case 224:{
+                  if(lexema.equals("|")||lexema.equals("&"))
+                     estate=222;
+                  else
+                     if(token.equals("<Op_Rel>"))
+                        estate=223;
+                     else{
+                        int next=((Integer)infoStates.pop()).intValue();
+                        padresState.pop();
+                        estate=next;
+                        reuse=true;
+                        nivel--;
+                     }
+            }break;
+            //------------------------------ Fin de Regla_OR ---------------------------
+            
+            
+            //-------------------------------- Archivos_H ------------------------------
+            case 250:{
+                  if(tipoElem==6){
+                     infoStates.push(new Integer(250));
+                     padresState.push(new Integer(250));
+                     estate=5;
+                     nivel++;
+                     if(etapa<=1){
+                        etapa=2;
+                     }else{
+                        String err="Las constantes se deben declarar una sola vez y solo al principio del programa despues de los archivos si los hay.";
+                        editor.errCount++;
+                        editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     }
+                  }else
+                     if(tipoElem==12){
+                        infoStates.push(new Integer(250));
+                        padresState.push(new Integer(250));
+                        estate=11;
+                        nivel++;
+                        if(etapa<=2){
+                           etapa=3;
+                        }else{
+                           String err="Las variables se deben declarar una sola vez y solo despues de los archivos y las constantes si los hay.";
+                           editor.errCount++;
+                           editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        }
+                     }else
+                        if(tipoElem==18){
+                           infoStates.push(new Integer(250));
+                           padresState.push(new Integer(250));
+                           estate=19;
+                           nivel++;
+                           if(etapa<=3){
+                              etapa=4;
+                           }else{
+                              String err="Los arreglos se deben declarar una sola vez y solo despues de los archivos, las constantes y/o las variables si los hay.";
+                              editor.errCount++;
+                              editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                           }
+                        }else
+                           if(tipoElem==21){
+                              infoStates.push(new Integer(250));
+                              padresState.push(new Integer(250));
+                              estate=40;
+                              nivel++;
+                              if(etapa<=4){
+                                 etapa=5;
+                              }else{
+                                 String err="Los registros se deben declarar una sola vez y solo despues de los archivos, las constantes, las variables y/o los arreglos, si los hay.";
+                                 editor.errCount++;
+                                 editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                              }
+                           }else
+                              if(tipoElem==23){
+                                 infoStates.push(new Integer(250));
+                                 padresState.push(new Integer(250));
+                                 estate=53;
+                                 nivel++;
+                                 if(etapa<=5){
+                                    etapa=6;
+                                 }else{
+                                    String err="Los prototipos se deben declarar una sola vez y solo despues de los archivos, las constantes, las variables, los arreglos y/o los registros, si los hay.";
+                                    editor.errCount++;
+                                    editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                                 }
+                              }else
+                                 if(tipoElem==22){
+                                    infoStates.push(new Integer(250));
+                                    padresState.push(new Integer(250));
+                                    modulosBan=true;
+                                    estate=57;
+                                    nivel++;
+                                    if(etapa<=6){
+                                       etapa=6;
+                                    }else{
+                                       String err="Los modulos se deben declarar una sola vez y solo despues de los archivos, las constantes, las variables, los arreglos y/o los registros, si los hay.";
+                                       editor.errCount++;
+                                       editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                                    }
+                                 }else{
+                                    if(lexema.equals("ARCHIVOS")){
+                                    	String err="No se pueden declarar Archivos en un archivo de inclusión.";
+	                                    editor.errCount++;
+	                                    editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                                    }else if(lexema.equals("PRINCIPAL")){
+                                    	String err="Los archivos de inclusión no pueden tener un bloque Principal.";
+	                                    editor.errCount++;
+	                                    editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                                    }else{
+                                    	String err="Código no previsto: "+lexema;
+	                                    editor.errCount++;
+	                                    editor.errores(estado,2,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                                    }
+                                    estate=mError.recuperaArchivosH();
+                                 }
+            }break;
+            //---------------------------- Fin de Archivos_H ---------------------------
+         }
+         if(!mError.tokenBuffer.isEmpty()){
+            
+            System.out.print("*Buffer:");
+            for(int i=0;i<mError.lexemaBuffer.size();i++)
+               System.out.print(" "+mError.lexemaBuffer.get(i));
+            System.out.print("*");
+            
+            token=(String)mError.tokenBuffer.remove(0);
+            lexema=(String)mError.lexemaBuffer.remove(0);
+            tipoElem=((Integer)mError.tipoBuffer.remove(0)).intValue();
+            reuse=true;
+         }
+         
+         if(!reuse)
+            token=dameToken();
+      }
+      System.out.println("\nFin del Analisis!!");
+      if(etapa!=7&&(win.nombre.endsWith(".i")||win.nombre.endsWith(".I"))){
+         String err="Faltó el bloque Principal del programa.";
+         editor.errCount++;
+         editor.errores(estado,2,err,lineCounter,i-1,lexema,win,win.nombre,win.ruta);
+      }else
+         if(!modulosBan&&(win.nombre.endsWith(".h")||win.nombre.endsWith(".H"))){
+            String err="El bloque de Modulos es necesario en los archivos de inclusión.";
+            editor.errCount++;
+            editor.errores(estado,2,err,lineCounter,i-1,lexema,win,win.nombre,win.ruta);
+         }
+         
+   }
+   
+   
+   //*************************************************************************************
+   //*******************************    Analisis Lexico    *******************************
+   //*************************************************************************************
+   public String dameToken(){
+      lexema="";
+      estado=0;
+      while(i<fuente.length()){
+         i++;
+         if(i>=fuente.length())
+            c='\0';
+         else
+            c=fuente.charAt(i);
+         
+         switch(estado){
+            case 0:{
+                  tipoChar=dameTipoChar(c);
+                  switch(tipoChar){
+                     case 1:{//Es digito
+                           estado=1;
+                           lexema=lexema+c;
+                     }break;
+                     case 2:{//Es letra
+                           estado=8;
+                           lexema=lexema+c;
+                     }break;
+                     case 3:{//Es guion bajo
+                           estado=9;
+                           lexema=lexema+c;
+                     }break;
+                     case 4:{//Es comilla
+                           estado=10;
+                           lexema=lexema+c;
+                     }break;
+                     case 5:{//Es <
+                           estado=12;
+                           lexema=lexema+c;
+                     }break;
+                     case 6:{//Es >
+                           estado=17;
+                           lexema=lexema+c;
+                     }break;
+                     case 7:{//Es =
+                           estado=18;
+                           lexema=lexema+c;
+                     }break;
+                     case 8:{//Es +,-,=,*
+                           estado=21;
+                           lexema=lexema+c;
+                     }break;
+                     case 9:{//Es |,&,!
+                           estado=22;
+                           lexema=lexema+c;
+                     }break;
+                     case 10:{//Es delimitador
+                           estado=23;
+                           lexema=lexema+c;
+                     }break;
+                     case -1:{//Caracter ilegal
+                           String err="'"+c+"' es un caracter invalido";
+                           editor.errCount++;
+                           lexema=lexema+c;
+                           editor.errores(estado,1,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                           lexema="";
+                     }break;
+                  }
+            }break;
+            case 1:{
+                  if(Character.isDigit(c))
+                     lexema=lexema+c;
+                  else
+                     if(c=='.'){
+                        estado=2;
+                        lexema=lexema+c;
+                     }else
+                        if(c=='e'||c=='E'){
+                           estado=4;
+                           lexema=lexema+c;
+                        }else{
+                           i--;
+                           return "<Entero>";
+                        }
+            }break;
+            case 2:{
+                  if(Character.isDigit(c)){
+                     estado=3;
+                     lexema=lexema+c;
+                  }else{
+                     i--;
+                     String err="se esperaba un digito y se encontró: '"+c+"' en el lexema: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,1,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     return "<Real>";
+                  }
+            }break;
+            case 3:{
+                  if(Character.isDigit(c))
+                     lexema=lexema+c;
+                  else
+                     if(c=='e'||c=='E'){
+                        estado=4;
+                        lexema=lexema+c;
+                     }else{
+                        i--;
+                        return "<Real>";
+                     }
+            }break;
+            case 4:{
+                  if(Character.isDigit(c)){
+                     estado=6;
+                     lexema=lexema+c;
+                  }else
+                     if(c=='+'||c=='-'){
+                        estado=5;
+                        lexema=lexema+c;
+                     }else{
+                        i--;
+                        String err="se esperaba un digito o un +|- y se encontró: '"+c+"' en el lexema: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,1,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        return "<Real>";
+                     }
+            }break;
+            case 5:{
+                  if(Character.isDigit(c)){
+                     estado=6;
+                     lexema=lexema+c;
+                  }else{
+                     i--;
+                     String err="se esperaba un digito y se encontró: '"+c+"' en el lexema: "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,1,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     return "<Real>";
+                  }
+            }break;
+            case 6:{
+                  if(Character.isDigit(c)){
+                     estado=7;
+                     lexema=lexema+c;
+                  }else{
+                     i--;
+                     return "<Real>";
+                  }
+            }break;
+            case 7:{
+                  i--;
+                  return "<Real>";
+            }//break;
+            case 8:{
+                  tipoChar=dameTipoChar(c);
+                  if(tipoChar>=1&&tipoChar<=3){
+                     lexema=lexema+c;
+                  }else{
+                     i--;
+                     if(lexema.equals("DIV"))
+                        return "<Op_Aritm>";
+                     else
+                        if(lexema.equals("MOD"))
+                           return "<Op_Aritm>";
+                        else
+                           if(lexema.equals("POT"))
+                              return "<Op_Aritm>";
+                           else
+                              if(lexema.equals("VERDADERO"))
+                                 return "<Logico>";
+                              else
+                                 if(lexema.equals("FALSO"))
+                                    return "<Logico>";
+                                 else
+                                    if(findReserved(lexema)>-1)
+                                       return "<Pal_Res>";
+                                    else
+                                       return "<Identificador>";
+                  }
+            }break;
+            case 9:{
+                  tipoChar=dameTipoChar(c);
+                  if(tipoChar==3){
+                     lexema=lexema+c;
+                  }else
+                     if(tipoChar==1||tipoChar==2){
+                        estado=8;
+                        lexema=lexema+c;
+                     }else{
+                        i--;
+                        String err="los identificadores no pueden ser de solo guiones bajos: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,1,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        return "<Identificador>";
+                     }
+            }break;
+            case 10:{
+                  if(c=='"'){
+                     estado=11;
+                     lexema=lexema+c;
+                  }else
+                     if(c!='\n'&&c!='\0'){
+                        lexema=lexema+c;
+                     }else{
+                        i--;
+                        String err="Las cadenas deben ser de una sola linea: "+lexema;
+                        editor.errCount++;
+                        editor.errores(estado,1,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        return "<Cadena>";
+                     }
+            }break;
+            case 11:{
+                  i--;
+                  return "<Cadena>";
+            }//break;
+            case 12:{
+                  if(c=='!'){
+                     estado=13;
+                     lexema=lexema+c;
+                  }else
+                     if(c=='='){
+                        estado=18;
+                        lexema=lexema+c;
+                     }else
+                        if(c=='>'){
+                           estado=19;
+                           lexema=lexema+c;
+                        }else
+                           if(c=='-'){
+                              estado=20;
+                              lexema=lexema+c;
+                           }else{
+                              i--;
+                              return "<Op_Rel>";
+                           }
+            }break;
+            case 13:{
+                  if(c=='-'){
+                     estado=14;
+                     lexema=lexema+c;
+                  }else{
+                     i--;
+                     String err="Los comentarios deben iniciar con la cadena '<!-' (sin las comillas): "+lexema;
+                     editor.errCount++;
+                     editor.errores(estado,1,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                     
+                     lexema="";
+                     estado=0;
+                  }
+            }break;
+            case 14:{
+                  if(c=='-'){
+                     estado=15;
+                     lexema=lexema+c;
+                  }else
+                     if(c!='\0'){
+                        lexema=lexema+c;
+                        if(c=='\n')
+                           lineCounter++;
+                     }else{
+                        i--;
+                        String err="Debes finalizar el comentario antes de que sea el fin del documento";
+                        editor.errCount++;
+                        editor.errores(estado,1,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        
+                        lexema="";
+                        estado=0;
+                     }
+            }break;
+            case 15:{
+                  if(c=='-'){
+                     lexema=lexema+c;
+                  }else
+                     if(c=='>'){
+                        estado=16;
+                        lexema=lexema+c;
+                     }else
+                        if(c!='\0'){
+                           estado=14;
+                           lexema=lexema+c;
+                           if(c=='\n')
+                              lineCounter++;
+                        }else{
+                           i--;
+                           String err="Debes finalizar el comentario antes de que sea el fin del documento";
+                           editor.errCount++;
+                           editor.errores(estado,1,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                           
+                           lexema="";
+                           estado=0;
+                        }
+            }break;
+            case 16:{
+                  i--;
+                  lexema="";
+                  estado=0;
+            }break;
+            case 17:{
+                  if(c=='='){
+                     estado=18;
+                     lexema=lexema+c;
+                  }else{
+                     i--;
+                     return "<Op_Rel>";
+                  }
+            }break;
+            case 18:{
+                  i--;
+                  return "<Op_Rel>";
+            }//break;
+            case 19:{
+                  i--;
+                  return "<Op_Rel>";
+            }//break;
+            case 20:{
+                  i--;
+                  return "<Op_Asign>";
+            }//break;
+            case 21:{
+                  i--;
+                  return "<Op_Aritm>";
+            }//break;
+            case 22:{
+                  i--;
+                  return "<Op_Log>";
+            }//break;
+            case 23:{
+                  i--;
+                  return "<Delimitador>";
+            }//break;
+         }
+      }
+      return "\0";
+   }
+   
+   public int dameTipoChar(char car){
+      if(Character.isDigit(car)){
+         return 1;
+      }else if(car=='_'){
+         return 3;
+      }else if(car=='"'){
+         return 4;
+      }else if(car=='<'){
+         return 5;
+      }else if(car=='>'){
+         return 6;
+      }else if(car=='='){
+         return 7;
+      }else if(car=='+'||car=='-'||car=='*'||car=='/'){
+         return 8;
+      }else if(car=='|'||car=='&'||car=='!'){
+         return 9;
+      }else if(car==','||car==';'||car=='('||car==')'||car=='['||car==']'||car=='{'||car=='}'){
+         return 10;
+      }else if(Character.isLetter(car)&&car!='º'&&car!='ª'&&car!='ç'&&car!='Ç'){
+         return 2;
+      }else if(car=='\n'){
+         if(estado==0)
+            lineCounter++;
+         /*System.out.print("\nEmpieza linea "+lineCounter);
+         System.out.println(", Lexema: "+lexema);*/
+         return 0;
+      }else
+         if(car=='\t'||car=='\0'||Character.isWhitespace(car)){
+            return 0;
+         }else{
+            return -1;
+         }
+   }
+   private void existeLibreria(){
+      if(!lexema.endsWith(".h\"")&&!lexema.endsWith(".H\"")){
+         String err="El archivo referenciado debe tener la extension \".h\": "+lexema;
+         editor.errCount++;
+         editor.errores(estado,0,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+      }else{
+         //Abre el archivo para ver si existe:
+         boolean existe;
+         String ruta=lexema.substring(1,lexema.length()-1);
+         
+         //Checa si la ruta es absoluta o relativa y le agrega la ruta completa si esta es relativa
+         if(ruta.indexOf(':')==-1){
+            //La ruta es relativa
+            String rutaTmp=win.ruta.substring(0,win.ruta.lastIndexOf("\\"));
+            rutaTmp=rutaTmp+'\\'+ruta;
+            ruta=rutaTmp.toString();
+         }
+         //System.out.println("Ruta: "+ruta);
+         //Checa si ya se habia declarado antes la libreria:
+         ruta=ruta.toLowerCase();
+         if(librerias.contains(ruta)){
+            String err="La libreria \""+ruta+"\" ya se incluyó antes.";
+            editor.errCount++;
+            editor.errores(estado,0,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+         }else{
+            librerias.add(ruta);
+            try{
+               FileReader fr=new FileReader(ruta);
+               existe=true;
+               fr.close();
+            }catch(IOException ex){
+               existe=false;
+            }
+            if(!existe){
+               String err="No se encontró la libreria en la ruta especificada: "+ruta;
+               editor.errCount++;
+               editor.errores(estado,0,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+            }else{
+               //Analiza el archivo
+               String ghostName="@"+(ruta.substring(ruta.lastIndexOf("\\")+1,ruta.length()));
+               
+               Ventana ghostWin=new Ventana(null,null,null,ghostName,null,ruta);
+               editor.ventanas.add(ghostWin);
+               
+               Sintactico sint=new Sintactico(ghostWin,editor);
+               sint.estate=250;
+               sint.Programa();
+            }
+         }
+      }
+   }
+   
+   //****************************************************************************************
+   //**************     Todos los metodos para la recuperacion de errores:     **************
+   private void llenaReglas(){
+      ArrayList reglaTmp;
+      //Reglas.put(KEY,VALUE);
+      
+      reglaTmp=new ArrayList(8);
+      reglaTmp.add("ARCHIVOS");
+      reglaTmp.add("CONSTANTES");
+      reglaTmp.add("VARIABLES");
+      reglaTmp.add("ARREGLOS");
+      reglaTmp.add("REGISTROS");
+      reglaTmp.add("PROTOTIPOS");
+      reglaTmp.add("MODULOS");
+      reglaTmp.add("PRINCIPAL");
+      Reglas.put("Programa",reglaTmp);
+      //int array1[]={1,5,11,19,40,53,57,62};
+      int array1[]={0,0,0,0,0,0,0,0};
+      ReglasE.put("Programa",array1);
+      
+      reglaTmp=new ArrayList(5);
+      reglaTmp.add("ARCHIVOS");
+      reglaTmp.add("[");
+      reglaTmp.add("<Cadena>");//reuse
+      reglaTmp.add(",");
+      reglaTmp.add("]");
+      Reglas.put("Archivos",reglaTmp);
+      //int array2[]={1,2,2,2,4};
+      int array2[]={0,1,2,3,3};
+      ReglasE.put("Archivos",array2);
+      
+      reglaTmp=new ArrayList(10);
+      reglaTmp.add("CONSTANTES");
+      reglaTmp.add("[");
+      reglaTmp.add("<Identificador>");
+      reglaTmp.add("<Op_Asign>");
+      reglaTmp.add("<Cadena>");
+      reglaTmp.add("<Entero>");
+      reglaTmp.add("<Real>");
+      reglaTmp.add("<Logico>");
+      reglaTmp.add(",");
+      reglaTmp.add("]");
+      Reglas.put("Constantes",reglaTmp);
+      //int array3[]={5,6,7,8,9,9,9,9,6,10};
+      int array3[]={0,5,6,7,8,8,8,8,9,9};
+      ReglasE.put("Constantes",array3);
+      
+      reglaTmp=new ArrayList(16);
+      reglaTmp.add("<Identificador>");
+      reglaTmp.add("<Identificador>");// 1
+      reglaTmp.add("VARIABLES");
+      reglaTmp.add("[");
+      reglaTmp.add("<Op_Asign>");
+      reglaTmp.add(",");
+      reglaTmp.add(";");
+      reglaTmp.add("<Cadena>");
+      reglaTmp.add("<Entero>");
+      reglaTmp.add("<Real>");
+      reglaTmp.add("<Logico>");
+      reglaTmp.add("ENTERO");
+      reglaTmp.add("REAL");
+      reglaTmp.add("CADENA");
+      reglaTmp.add("LOGICO");
+      reglaTmp.add("]");
+      Reglas.put("Variables",reglaTmp);
+      //int array4[]={14,18,11,12,16,13,12,17,17,17,17,13,13,13,13,15};
+      //int array4[]={13,16,0
+      int array4[]={13,13,0,11,14,14,14,16,16,16,16,12,12,12,12,14};
+      ReglasE.put("Variables",array4);
+      
+      reglaTmp=new ArrayList(44);
+      reglaTmp.add("[");//                  0-20
+      reglaTmp.add("<Entero>");//           1-24
+      //Desviacion para arreglo simple
+      reglaTmp.add("}");//                  2-25
+      reglaTmp.add(",");//                  3-21
+      reglaTmp.add(";");//                  4-20
+      reglaTmp.add("<-");//                 5-28
+      reglaTmp.add("]");//                  6-31
+      reglaTmp.add("[");//                  7-29
+      reglaTmp.add("<Entero>");//           8-30
+      reglaTmp.add("<Real>");//             9-30
+      reglaTmp.add("<Cadena>");//          10-30
+      reglaTmp.add("<Logico>");//          11-30
+      reglaTmp.add(",");//                 12-29
+      reglaTmp.add("]");//                 13-31
+      reglaTmp.add(",");//                 14-21
+      reglaTmp.add(";");//                 15-20
+      reglaTmp.add("]");//                 16-27
+      //Desviacion para arreglo bidimensional
+      reglaTmp.add(",");//                 17-26
+      reglaTmp.add("<Entero>");//          18-32
+      reglaTmp.add("}");//                 19-33
+      reglaTmp.add(",");//                 20-21
+      reglaTmp.add(";");//                 21-20
+      reglaTmp.add("<-");//                22-34
+      reglaTmp.add("]");//                 23-38
+      reglaTmp.add("[");//                 24-35
+      reglaTmp.add("[");//                 25-36
+      reglaTmp.add("<Entero>");//          26-37
+      reglaTmp.add("<Real>");//            27-37
+      reglaTmp.add("<Cadena>");//          28-37
+      reglaTmp.add("<Logico>");//          29-37
+      reglaTmp.add(",");//                 30-36
+      reglaTmp.add("]");//                 31-38
+      reglaTmp.add(",");//                 32-35
+      reglaTmp.add("]");//                 33-39
+      reglaTmp.add(",");//                 34-21
+      reglaTmp.add(";");//                 35-20
+      reglaTmp.add("]");//                 36-27
+      //Elementos generales:
+      reglaTmp.add("ARREGLOS");//          37-19
+      reglaTmp.add("ENTERO");//            38-21
+      reglaTmp.add("REAL");//              39-21
+      reglaTmp.add("CADENA");//            40-21
+      reglaTmp.add("LOGICO");//            41-21
+      reglaTmp.add("<Identificador>");//   42-22
+      reglaTmp.add("{");//                 43-23
+      Reglas.put("Arreglos",reglaTmp);
+      /*int array5[]={20,24,
+                    25,21,20,28,31,29,30,30,30,30,29,31,21,20,27,
+                    26,32,33,21,20,34,38,35,36,37,37,37,37,36,38,35,39,21,20,27,
+                    19,21,21,21,21,22,23};*/
+      int array5[]={19,23,
+                    24,25,25,25,30,28,29,29,29,29,30,30,31,31,31,
+                    24,26,32,33,33,33,37,34,35,36,36,36,36,37,37,38,38,39,39,39,
+                    0,20,20,20,20,21,22};
+      ReglasE.put("Arreglos",array5);
+      
+      reglaTmp=new ArrayList(25);
+      reglaTmp.add("[");//                  0-41
+      reglaTmp.add("<Identificador>");//    1-42
+      reglaTmp.add("[");//                  2-43
+      reglaTmp.add("<Identificador>");//    3-45
+      reglaTmp.add(",");//                  4-44
+      reglaTmp.add(";");//                  5-43
+      reglaTmp.add("]");//                  6-46
+      reglaTmp.add(";");//                  7-41
+      reglaTmp.add("]");//                  8-52
+      reglaTmp.add("{");//                  9-47
+      reglaTmp.add("<Entero>");//          10-48
+      reglaTmp.add("}");//                 11-51
+      reglaTmp.add(",");//                 12-49
+      reglaTmp.add("<Entero>");//          13-50
+      reglaTmp.add("}");//                 14-51
+      reglaTmp.add(";");//                 15-41
+      reglaTmp.add("]");//                 16-52
+      reglaTmp.add("REGISTROS");//         17-40
+      reglaTmp.add("ENTERO");//            18-44
+      reglaTmp.add("REAL");//              19-44
+      reglaTmp.add("CADENA");//            20-44
+      reglaTmp.add("LOGICO");//            21-44
+      reglaTmp.add("<Identificador>");//   22-42
+      reglaTmp.add("[");//                 23-43
+      reglaTmp.add("{");//                 24-47
+      Reglas.put("Registros",reglaTmp);
+      //int array6[]={41,42,43,45,44,43,46,41,52,47,48,51,49,50,51,41,52,40,44,44,44,44,42,43,47};
+      int array6[]={40,41,42,44,45,45,45,46,46,46,47,48,48,49,50,51,51,0,43,43,43,43,41,42,46};
+      ReglasE.put("Registros",array6);
+      
+      reglaTmp=new ArrayList(6);
+      reglaTmp.add("PROTOTIPOS");//        0
+      reglaTmp.add("[");//                 1
+      reglaTmp.add("]");//                 2
+      reglaTmp.add("PROCEDIMIENTO");//     3 reuse
+      reglaTmp.add("FUNCION");//           4 reuse
+      reglaTmp.add(";");//                 5
+      Reglas.put("Prototipos",reglaTmp);
+      //int array7[]={53,54,56,54,54,54};
+      int array7[]={0,53,55,54,54,55};
+      ReglasE.put("Prototipos",array7);
+      
+      reglaTmp=new ArrayList(6);
+      reglaTmp.add("MODULOS");//           0
+      reglaTmp.add("[");//                 1
+      reglaTmp.add("]");//                 2
+      reglaTmp.add("PROCEDIMIENTO");//     3 reuse
+      reglaTmp.add("FUNCION");//           4 reuse
+      reglaTmp.add(";");//                 5
+      Reglas.put("Modulos",reglaTmp);
+      //int array8[]={57,58,61,58,58,58};
+      int array8[]={0,57,60,58,58,60};
+      ReglasE.put("Modulos",array8);
+      
+      reglaTmp=new ArrayList(8);
+      reglaTmp.add("PROCEDIMIENTO");//     0
+      reglaTmp.add("<Identificador>");//   1
+      reglaTmp.add("{");//                 2
+      reglaTmp.add("}");//                 3 reuse
+      reglaTmp.add("ENTERO");//            4 reuse
+      reglaTmp.add("REAL");//              5 reuse
+      reglaTmp.add("CADENA");//            6 reuse
+      reglaTmp.add("LOGICO");//            7 reuse
+      Reglas.put("EncabezadoProc",reglaTmp);
+      //int array9[]={63,64,65,66,65,65,65,65};
+      int array9[]={211,63,64,65,65,65,65,65};
+      ReglasE.put("EncabezadoProc",array9);
+      
+      reglaTmp=new ArrayList(12);
+      reglaTmp.add("ENTERO");//             0-69 reuse
+      reglaTmp.add("REAL");//               1-69 reuse
+      reglaTmp.add("CADENA");//             2-69 reuse
+      reglaTmp.add("LOGICO");//             3-69 reuse
+      reglaTmp.add("ENTERO");//             4-71 reuse
+      reglaTmp.add("REAL");//               5-71 reuse
+      reglaTmp.add("CADENA");//             6-71 reuse
+      reglaTmp.add("LOGICO");//             7-71 reuse
+      reglaTmp.add("FUNCION");//            8-67
+      reglaTmp.add("<Identificador>");//    9-68
+      reglaTmp.add("{");//                 10-69
+      reglaTmp.add("}");//                 11-71
+      Reglas.put("EncabezadoFunc",reglaTmp);
+      //int array10[]={69,69,69,69,71,71,71,71,67,68,69,71};
+      int array10[]={69,69,69,69,71,71,71,71,212,67,68,70};
+      ReglasE.put("EncabezadoFunc",array10);
+      
+      reglaTmp=new ArrayList(11);
+      reglaTmp.add("<Entero>");//           0-75
+      reglaTmp.add("<Entero>");//           1-78
+      reglaTmp.add("<Identificador>");//    2-73
+      reglaTmp.add("{");//                  3-74
+      reglaTmp.add("}");//                  4-76
+      reglaTmp.add(",");//                  5-72
+      reglaTmp.add(";");//                  6-79
+      reglaTmp.add("ENTERO");//             7-72
+      reglaTmp.add("REAL");//               8-72
+      reglaTmp.add("CADENA");//             9-72
+      reglaTmp.add("LOGICO");//            10-72
+      Reglas.put("Parametros",reglaTmp);
+      //Revisar cuando se espera una coma al estar dentro de dimensiones (al caso 77)
+      //int array11[]={75,78,73,74,76,72,79,72,72,72,72};
+      int array11[]={74,77,72,73,78,73,76,79,79,79,79};
+      ReglasE.put("Parametros",array11);
+      
+      reglaTmp=new ArrayList(4);
+      reglaTmp.add("VARIABLES");//Reuse
+      reglaTmp.add("ARREGLOS");//Reuse
+      reglaTmp.add("REGISTROS");//Reuse
+      reglaTmp.add("INICIO");//Reuse
+      Reglas.put("Cuerpo",reglaTmp);
+      int array12[]={80,80,80,83};
+      ReglasE.put("Cuerpo",array12);
+      
+      reglaTmp=new ArrayList(5);
+      reglaTmp.add("INICIO");
+      reglaTmp.add("[");
+      reglaTmp.add(";");
+      reglaTmp.add("]");
+      reglaTmp.add("FIN");
+      //IMPORTANTE: Si no es ninguno de estos elementos, entrar en Instruccion, 
+      //            a menos que ya se haya encontrado el corchete de cierre
+      Reglas.put("Bloque",reglaTmp);
+      //int array13[]={86,87,89,91,92};
+      int array13[]={85,86,88,90,91};
+      ReglasE.put("Bloque",array13);
+      
+      //------------------- Fragmentos para analizar instruccion -------------------
+      reglaTmp=new ArrayList(6);
+      reglaTmp.add("SI");//                0-102
+      reglaTmp.add("MIENTRAS");//          1-103
+      reglaTmp.add("HACER");//             2-104
+      reglaTmp.add("DESDE");//             3-105
+      reglaTmp.add("DEPENDIENDO");//       4-106
+      reglaTmp.add("LEER");//              5-111
+      Reglas.put("Instruccion",reglaTmp);
+      //int array14[]={102,103,104,105,106,111};
+      int array14[]={93,93,93,93,93,93};
+      ReglasE.put("Instruccion",array14);
+      
+      reglaTmp=new ArrayList(6);
+      reglaTmp.add("<Identificador>");//   0-94
+      reglaTmp.add("(");//                 1-95
+      reglaTmp.add(")");//                 2-101
+      reglaTmp.add("<-");//                3-98
+      reglaTmp.add("[");//                 4-99
+      reglaTmp.add("{");//                 5-100
+      Reglas.put("InstruccionIdent",reglaTmp);
+      //int array15[]={94,95,101,98,99,100};
+      int array15[]={93,94,96,94,94,94};
+      ReglasE.put("InstruccionIdent",array15);
+      
+      reglaTmp=new ArrayList(3);
+      reglaTmp.add("REGRESAR");//          0-107
+      reglaTmp.add("(");//                 1-108
+      reglaTmp.add(")");//                 2-101
+      Reglas.put("InstruccionReturn",reglaTmp);
+      //int array16[]={107,108,101};
+      int array16[]={93,107,109};
+      ReglasE.put("InstruccionReturn",array16);
+      
+      reglaTmp=new ArrayList(3);
+      reglaTmp.add("ESCRIBIR");//          0-112
+      reglaTmp.add("(");//                 1-113
+      reglaTmp.add(")");//                 2-101
+      Reglas.put("InstruccionWrite",reglaTmp);
+      //int array17[]={112,113,101};
+      int array17[]={93,112,114};
+      ReglasE.put("InstruccionWrite",array17);
+      
+      reglaTmp=new ArrayList(3);
+      reglaTmp.add("ESCRIBIRCSL");//       0-116
+      reglaTmp.add("(");//                 1-117
+      reglaTmp.add(")");//                 2-101
+      Reglas.put("InstruccionWriteLN",reglaTmp);
+      //int array18[]={116,117,101};
+      int array18[]={93,116,118};
+      ReglasE.put("InstruccionWriteLN",array18);
+      
+      reglaTmp=new ArrayList(4);
+      reglaTmp.add("DTPT");//              0-120
+      reglaTmp.add("LPPT");//              1-120
+      reglaTmp.add("(");//                 2-121
+      reglaTmp.add(")");//                 3-101
+      Reglas.put("InstruccionPT",reglaTmp);
+      //int array19[]={120,120,121,101};
+      int array19[]={93,93,120,121};
+      ReglasE.put("InstruccionPT",array19);
+      //--------------------- Fin de fragmentos de instruccion ---------------------
+      
+      reglaTmp=new ArrayList(5);
+      reglaTmp.add("SI");
+      reglaTmp.add("SINO");
+      reglaTmp.add("SINOSI");
+      Reglas.put("Si",reglaTmp);
+      //int array20[]={122,125,122};
+      int array20[]={213,124,124};
+      ReglasE.put("Si",array20);
+      
+      reglaTmp=new ArrayList(2);
+      reglaTmp.add("MIENTRAS");
+      reglaTmp.add("INICIO");// reuse
+      Reglas.put("Mientras",reglaTmp);
+      //int array21[]={127,128};
+      int array21[]={214,128};
+      ReglasE.put("Mientras",array21);
+      
+      reglaTmp=new ArrayList(3);
+      reglaTmp.add("HACER");
+      reglaTmp.add("INICIO");// reuse
+      reglaTmp.add("HASTA");
+      Reglas.put("Hacer",reglaTmp);
+      //int array22[]={130,130,132};
+      int array22[]={215,130,131};
+      ReglasE.put("Hacer",array22);
+      
+      reglaTmp=new ArrayList(26);
+      reglaTmp.add("DESDE");//             0-134
+      reglaTmp.add("<Identificador>");//   1-135
+      reglaTmp.add("{");//                 2-136
+      //Para entrar a expresion:
+      reglaTmp.add("(");//                 3-136 reuse
+      reglaTmp.add("+");//                 4-136 reuse
+      reglaTmp.add("-");//                 5-136 reuse
+      reglaTmp.add("<Identificador>");//   6-136 reuse
+      reglaTmp.add("<Entero>");//          7-136 reuse
+      reglaTmp.add("<Real>");//            8-136 reuse
+      reglaTmp.add("<Cadena>");//          9-136 reuse
+      reglaTmp.add("<Logico>");//         10-136 reuse
+      //Fin de expresion
+      reglaTmp.add(",");//                11-138
+      //Para entrar a expresion:
+      reglaTmp.add("(");//                12-138 reuse
+      reglaTmp.add("+");//                13-138 reuse
+      reglaTmp.add("-");//                14-138 reuse
+      reglaTmp.add("<Identificador>");//  15-138 reuse
+      reglaTmp.add("<Entero>");//         16-138 reuse
+      reglaTmp.add("<Real>");//           17-138 reuse
+      reglaTmp.add("<Cadena>");//         18-138 reuse
+      reglaTmp.add("<Logico>");//         19-138 reuse
+      //Fin de expresion
+      reglaTmp.add("}");//                20-140
+      reglaTmp.add("INC");//              21-141
+      reglaTmp.add("DEC");//              22-141
+      reglaTmp.add("INICIO");//           23-140 reuse
+      reglaTmp.add("<Entero>");//         24-142
+      reglaTmp.add("INICIO");//           25-142 reuse
+      Reglas.put("Desde",reglaTmp);
+      //int array23[]={134,135,136,136,136,136,136,136,136,136,136,138,138,138,138,138,138,138,138,138,140,141,141,140,142,142};
+      int array23[]={216,134,135,136,136,136,136,136,136,136,136,137,138,138,138,138,138,138,138,138,139,140,140,140,141,142};
+      ReglasE.put("Desde",array23);
+      
+      reglaTmp=new ArrayList(16);
+      reglaTmp.add("DEPENDIENDO");//       0-144
+      reglaTmp.add("<Identificador>");//   1-145
+      reglaTmp.add("[");//                 2-146
+      reglaTmp.add("CASO");//              3-147
+      reglaTmp.add("<Identificador>");//   4-148
+      reglaTmp.add("<Entero>");//          5-148
+      reglaTmp.add("<Real>");//            6-148
+      reglaTmp.add("<Cadena>");//          7-148
+      reglaTmp.add("<Logico>");//          8-148
+      reglaTmp.add("|");//                 9-147
+      reglaTmp.add("INICIO");//           10-148 reuse
+      reglaTmp.add(";");//                11-150
+      reglaTmp.add("CUALQUIER");//        12-151
+      reglaTmp.add("OTRO");//             13-152
+      reglaTmp.add("INICIO");//           14-152 reuse
+      reglaTmp.add("]");//                15-154
+      Reglas.put("Dependiendo",reglaTmp);
+      //int array24[]={144,145,146,147,148,148,148,148,148,147,148,150,151,152,152,154};
+      int array24[]={217,144,145,146,147,147,147,147,147,148,148,149,150,151,152,153};
+      ReglasE.put("Dependiendo",array24);
+      
+      reglaTmp=new ArrayList(1);
+      reglaTmp.add("<-");
+      Reglas.put("Asignacion",reglaTmp);
+      int arrayX[]={230};//155
+      ReglasE.put("Asignacion",arrayX);
+      
+      reglaTmp=new ArrayList(23);
+      //Para entrar a expresion:
+      reglaTmp.add("(");//                 0-160 reuse
+      reglaTmp.add("+");//                 1-160 reuse
+      reglaTmp.add("-");//                 2-160 reuse
+      reglaTmp.add("<Identificador>");//   3-160 reuse
+      reglaTmp.add("<Entero>");//          4-160 reuse
+      reglaTmp.add("<Real>");//            5-160 reuse
+      reglaTmp.add("<Cadena>");//          6-160 reuse
+      reglaTmp.add("<Logico>");//          7-160 reuse
+      //Fin de expresion
+      reglaTmp.add(",");//                 8-162
+      //Para entrar a expresion:
+      reglaTmp.add("(");//                 9-162 reuse
+      reglaTmp.add("+");//                10-162 reuse
+      reglaTmp.add("-");//                11-162 reuse
+      reglaTmp.add("<Identificador>");//  12-162 reuse
+      reglaTmp.add("<Entero>");//         13-162 reuse
+      reglaTmp.add("<Real>");//           14-162 reuse
+      reglaTmp.add("<Cadena>");//         15-162 reuse
+      reglaTmp.add("<Logico>");//         16-162 reuse
+      //Fin de expresion
+      reglaTmp.add("}");//                17-164
+      reglaTmp.add("<-");//               18-165
+      reglaTmp.add("[");//                19-157
+      reglaTmp.add("<Identificador>");//  20-158
+      reglaTmp.add("]");//                21-159
+      //Desvio hacia dimensiones de arreglo
+      reglaTmp.add("{");//                22-160
+      Reglas.put("AsignacionReg",reglaTmp);
+      /*int array25[]={160,160,160,160,160,160,160,160,
+                     162,162,162,162,162,162,162,162,162,164,165,157,158,159,160};*/
+      int array25[]={160,160,160,160,160,160,160,160,
+                     161,162,162,162,162,162,162,162,162,163,159,231,157,158,159};
+      ReglasE.put("AsignacionReg",array25);
+      
+      reglaTmp=new ArrayList(38);
+      //Desviacion hacia asignacion normal
+      //Para entrar a expresion:
+      reglaTmp.add("(");//                 0-167 reuse
+      reglaTmp.add("+");//                 1-167 reuse
+      reglaTmp.add("-");//                 2-167 reuse
+      reglaTmp.add("<Identificador>");//   3-167 reuse
+      reglaTmp.add("<Entero>");//          4-167 reuse
+      reglaTmp.add("<Real>");//            5-167 reuse
+      reglaTmp.add("<Cadena>");//          6-167 reuse
+      reglaTmp.add("<Logico>");//          7-167 reuse
+      //Fin de expresion
+      reglaTmp.add(",");//                 8-169
+      //Para entrar a expresion:
+      reglaTmp.add("(");//                 9-169 reuse
+      reglaTmp.add("+");//                10-169 reuse
+      reglaTmp.add("-");//                11-169 reuse
+      reglaTmp.add("<Identificador>");//  12-169 reuse
+      reglaTmp.add("<Entero>");//         13-169 reuse
+      reglaTmp.add("<Real>");//           14-169 reuse
+      reglaTmp.add("<Cadena>");//         15-169 reuse
+      reglaTmp.add("<Logico>");//         16-169 reuse
+      //Fin de expresion
+      reglaTmp.add("}");//                17-171
+      reglaTmp.add("<-");//               18-172
+      //Desviacion a inicializacion unidimensional
+      reglaTmp.add("<Entero>");//         19-177
+      reglaTmp.add("<Real>");//           20-177
+      reglaTmp.add("<Cadena>");//         21-177
+      reglaTmp.add("<Logico>");//         22-177
+      reglaTmp.add(",");//                23-209
+      reglaTmp.add("]");//                24-182
+      //Desviacion a inicializacion bidimensional
+      reglaTmp.add("]");//                25-181
+      reglaTmp.add("]");//                26-182
+      reglaTmp.add("[");//                27-178
+      reglaTmp.add("<Entero>");//         28-179
+      reglaTmp.add("<Real>");//           29-179
+      reglaTmp.add("<Cadena>");//         30-179
+      reglaTmp.add("<Logico>");//         31-179
+      reglaTmp.add(",");//                32-180
+      reglaTmp.add(",");//                33-178
+      reglaTmp.add("{");//                34-167
+      reglaTmp.add("}");//                35-174
+      reglaTmp.add("<-");//               36-175
+      reglaTmp.add("[");//                37-176
+      Reglas.put("AsignacionArr",reglaTmp);
+      /*int array26[]={167,167,167,167,167,167,167,167,169,169,169,169,169,169,169,169,169,171,172,
+                     177,177,177,177,209,182,181,182,178,179,179,179,179,180,178,167,174,175,176};*/
+      int array26[]={167,167,167,167,167,167,167,167,168,169,169,169,169,169,169,169,169,168,171,
+                     176,176,176,176,177,177,179,181,176,178,178,178,178,181,179,232,167,174,175};
+      ReglasE.put("AsignacionArr",array26);
+      
+      reglaTmp=new ArrayList(8);
+      reglaTmp.add("<Identificador>");//   0-185
+      reglaTmp.add("<Identificador>");//   1-187
+      reglaTmp.add("(");//                 2-184
+      reglaTmp.add("[");//                 3-186
+      reglaTmp.add("]");//                 4-188
+      reglaTmp.add("{");//                 5-185 reuse
+      reglaTmp.add(",");//                 6-184
+      reglaTmp.add(")");//                 7-190
+      Reglas.put("Leer",reglaTmp);
+      //int array27[]={185,187,184,186,188,185,184,190};
+      int array27[]={184,186,183,185,187,185,185,185};
+      ReglasE.put("Leer",array27);
+      
+      reglaTmp=new ArrayList(19);
+      reglaTmp.add("{");//                 0-192
+      //Para entrar a expresion:
+      reglaTmp.add("(");//                 1-192 reuse
+      reglaTmp.add("+");//                 2-192 reuse
+      reglaTmp.add("-");//                 3-192 reuse
+      reglaTmp.add("<Identificador>");//   4-192 reuse
+      reglaTmp.add("<Entero>");//          5-192 reuse
+      reglaTmp.add("<Real>");//            6-192 reuse
+      reglaTmp.add("<Cadena>");//          7-192 reuse
+      reglaTmp.add("<Logico>");//          8-192 reuse
+      //Fin de expresion
+      reglaTmp.add(",");//                 9-194
+      //Para entrar a expresion:
+      reglaTmp.add("(");//                10-194 reuse
+      reglaTmp.add("+");//                11-194 reuse
+      reglaTmp.add("-");//                12-194 reuse
+      reglaTmp.add("<Identificador>");//  13-194 reuse
+      reglaTmp.add("<Entero>");//         14-194 reuse
+      reglaTmp.add("<Real>");//           15-194 reuse
+      reglaTmp.add("<Cadena>");//         16-194 reuse
+      reglaTmp.add("<Logico>");//         17-194 reuse
+      //Fin de expresion
+      reglaTmp.add("}");//                18-196
+      Reglas.put("Dimensiones_Ident",reglaTmp);
+      //int array28[]={192,192,192,192,192,192,192,192,192,194,194,194,194,194,194,194,194,194,196};
+      int array28[]={191,192,192,192,192,192,192,192,192,193,194,194,194,194,194,194,194,194,195};
+      ReglasE.put("Dimensiones_Ident",array28);
+      
+      reglaTmp=new ArrayList(22);
+      reglaTmp.add("(");//                 0-200
+      reglaTmp.add("+");//                 1-198
+      reglaTmp.add("-");//                 2-198
+      reglaTmp.add("<Identificador>");//   3-202
+      reglaTmp.add("<Entero>");//          4-199
+      reglaTmp.add("<Real>");//            5-199
+      reglaTmp.add("<Cadena>");//          6-199
+      reglaTmp.add("<Logico>");//          7-199
+      reglaTmp.add("{");//                 8-202 reuse
+      //Desvio a parentesis
+      reglaTmp.add("(");//                 9-203
+      //Desvio a corchetes
+      reglaTmp.add("[");//                10-206
+      reglaTmp.add("<Identificador>");//  11-207
+      reglaTmp.add("]");//                12-208
+      reglaTmp.add("{");//                13-208 reuse
+      reglaTmp.add(")");//                14-204
+      reglaTmp.add("+");//                15-197
+      reglaTmp.add("-");//                16-197
+      reglaTmp.add("*");//                17-197
+      reglaTmp.add("/");//                18-197
+      reglaTmp.add("POT");//              19-197
+      reglaTmp.add("DIV");//              20-197
+      reglaTmp.add("MOD");//              21-197
+      Reglas.put("Expresion",reglaTmp);
+      //int array29[]={200,198,198,202,199,199,199,199,202,203,206,207,208,208,204,197,197,197,197,197,197,197};
+      int array29[]={197,197,197,197,197,197,197,197,202,202,202,206,207,208,205,199,199,199,199,199,199,199};
+      ReglasE.put("Expresion",array29);
+      
+      reglaTmp=new ArrayList(1);
+      reglaTmp.add(",");
+      Reglas.put("Parametros_Ident",reglaTmp);
+      int arrayY[]={221};//220
+      ReglasE.put("Parametros_Ident",arrayY);
+      
+      reglaTmp=new ArrayList(12);
+      reglaTmp.add("!");//                 0-223
+      reglaTmp.add("<Op_Rel>");//          1-223
+      reglaTmp.add("&");//                 2-222
+      reglaTmp.add("|");//                 3-222
+      //Para entrar a expresion:
+      reglaTmp.add("(");//                 4-223 reuse
+      reglaTmp.add("+");//                 5-223 reuse
+      reglaTmp.add("-");//                 6-223 reuse
+      reglaTmp.add("<Identificador>");//   7-223 reuse
+      reglaTmp.add("<Entero>");//          8-223 reuse
+      reglaTmp.add("<Real>");//            9-223 reuse
+      reglaTmp.add("<Cadena>");//         10-223 reuse
+      reglaTmp.add("<Logico>");//         11-223 reuse
+      //Fin de expresion
+      Reglas.put("Regla_OR",reglaTmp);
+      //int array30[]={223,223,222,222,223,223,223,223,223,223,223,223};
+      int array30[]={222,224,224,224,223,223,223,223,223,223,223,223};
+      ReglasE.put("Regla_OR",array30);
+      
+      reglaTmp=new ArrayList(6);
+      reglaTmp.add("CONSTANTES");
+      reglaTmp.add("VARIABLES");
+      reglaTmp.add("ARREGLOS");
+      reglaTmp.add("REGISTROS");
+      reglaTmp.add("PROTOTIPOS");
+      reglaTmp.add("MODULOS");
+      Reglas.put("ArchivosH",reglaTmp);
+      //int array31[]={5,11,19,40,53,57};
+      int array31[]={250,250,250,250,250,250};
+      ReglasE.put("ArchivosH",array31);
+   }
+}

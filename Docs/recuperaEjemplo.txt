@@ -1,0 +1,63 @@
+      ArrayList regla;
+      int reglaE[],pos=-1;
+      
+      String padre=damePadre(padreState);
+      String padreStrings[]=damePadreStrs(padreState);
+      
+      regla=(ArrayList)sint.Reglas.get("EncabezadoProc");
+      reglaE=(int[])sint.ReglasE.get("EncabezadoProc");
+      
+      for(int c=0;c<3&&pos==-1;c++){
+         pos=regla.indexOf(sint.lexema);
+         if(pos==-1)
+            pos=regla.indexOf(sint.token);
+         
+         if(pos==-1){
+            tokenBuffer.add(sint.token);
+            lexemaBuffer.add(sint.lexema);
+            tipoBuffer.add(new Integer(sint.tipoElem));
+            //System.out.println(" Agregando \""+sint.lexema+"\" al buffer");
+            if(c<2){
+               sint.token=sint.dameToken();
+               sint.tipoElem=sint.tipoLexema();
+            }
+         }
+      }
+      
+      if(pos!=-1){
+         tokenBuffer.clear();
+         lexemaBuffer.clear();
+         tipoBuffer.clear();
+         
+         return reglaE[pos];
+      }else{
+         //Aqui tiene que buscar en las otras reglas posibles en este nivel
+         String reglas[]={padre,"Parametros","EncabezadoProc","Cuerpo"};
+         boolean isHere=false;
+         int reglasPos=0;
+         
+         for(int c=0;c<3&&pos==-1;c++){
+            if(!tokenBuffer.isEmpty()){
+               sint.token=(String)tokenBuffer.remove(0);
+               sint.lexema=(String)lexemaBuffer.remove(0);
+               sint.tipoElem=((Integer)tipoBuffer.remove(0)).intValue();
+               //sint.reuse=true;
+            }
+            for(int i=1;i<reglas.length&&!isHere;i++){
+               regla=(ArrayList)sint.Reglas.get(reglas[i]);
+               pos=regla.indexOf(sint.lexema);
+               if(pos==-1)
+                  pos=regla.indexOf(sint.token);
+               
+               if(pos!=-1){
+                  isHere=true;
+                  reglasPos=i;
+                  sint.reuse=true;
+                  
+                  if(i==0){
+                     sint.infoStates.pop();
+                     sint.padresState.pop();
+                  }
+               }
+            }
+         }

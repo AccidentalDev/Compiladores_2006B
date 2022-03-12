@@ -1,0 +1,265 @@
+$Label1,32
+$Label10,201
+$Label11,224
+$Label12,228
+$Label2,52
+$Label3,24
+$Label4,87
+$Label5,70
+$Label6,77
+$Label7,86
+$Label8,92
+$Label9,92
+$LabelP,197
+$LabelT,228
+$PRINCIPAL,197
+a@arreglo,E,7,0
+arr@PRINCIPAL,E,10,0
+arreglo,N,0,0
+b@arreglo,E,2,6
+dsup@mover_torre,E,0,0
+i@PRINCIPAL,E,0,0
+mover_disco,N,0,0
+mover_torre,N,0,0
+movs,E,0,0
+n@mover_disco,E,0,0
+n@mover_torre,E,0,0
+numero_discos@torres_h,E,0,0
+paux@mover_torre,C,0,0
+pfinal@mover_disco,C,0,0
+pfinal@mover_torre,C,0,0
+pinicial@mover_disco,C,0,0
+pinicial@mover_torre,C,0,0
+poste_aux@torres_h,C,0,0
+poste_final@torres_h,C,0,0
+poste_inicial@torres_h,C,0,0
+torres_h,N,0,0
+#
+1	JMP  0,$LabelP
+2	LIT  "Algoritmo de las Torres de Hanoi.",0
+3	OPR  0,21
+4	LIT  0,0
+5	STO  0,movs
+6	LIT  "a",0
+7	STO  0,poste_inicial
+8	LIT  "c",0
+9	STO  0,poste_final
+10	LIT  "b",0
+11	STO  0,poste_aux
+12	LIT  "Introduce el numero de discos: ",0
+13	OPR  0,20
+14	OPR  numero_discos,19
+15	LIT  "",0
+16	OPR  0,21
+17	LOD  $Label3,0
+18	LOD  numero_discos,0
+19	LOD  poste_inicial,0
+20	LOD  poste_final,0
+21	LOD  poste_aux,0
+22	LIT  1,0
+23	CAL  mover_torre,$Label2
+24	LIT  "Se necesitaron ",0
+25	OPR  0,20
+26	LOD  movs,0
+27	OPR  0,20
+28	LIT  " movimientos.",0
+29	OPR  0,21
+30	OPR  0,22
+31	OPR  0,1
+32	STO  0,pfinal
+33	STO  0,pinicial
+34	STO  0,n
+35	LIT  "Se mueve el disco ",0
+36	OPR  0,20
+37	LOD  n,0
+38	OPR  0,20
+39	LIT  " desde el poste ",0
+40	OPR  0,20
+41	LOD  pinicial,0
+42	OPR  0,20
+43	LIT  " hasta el poste ",0
+44	OPR  0,20
+45	LOD  pfinal,0
+46	OPR  0,21
+47	LOD  movs,0
+48	LIT  1,0
+49	OPR  0,2
+50	STO  0,movs
+51	OPR  0,1
+52	STO  0,dsup
+53	STO  0,paux
+54	STO  0,pfinal
+55	STO  0,pinicial
+56	STO  0,n
+57	LOD  n,0
+58	LOD  dsup,0
+59	OPR  0,14
+60	JMC  F,$Label4
+61	LOD  $Label5,0
+62	LOD  n,0
+63	LIT  1,0
+64	OPR  0,3
+65	LOD  pinicial,0
+66	LOD  paux,0
+67	LOD  pfinal,0
+68	LIT  1,0
+69	CAL  mover_torre,$Label2
+70	LOD  $Label6,0
+71	LOD  n,0
+72	LOD  pinicial,0
+73	LOD  pfinal,0
+74	LOD  paux,0
+75	LOD  n,0
+76	CAL  mover_torre,$Label2
+77	LOD  $Label7,0
+78	LOD  n,0
+79	LIT  1,0
+80	OPR  0,3
+81	LOD  paux,0
+82	LOD  pfinal,0
+83	LOD  pinicial,0
+84	LIT  1,0
+85	CAL  mover_torre,$Label2
+86	JMP  0,$Label8
+87	LOD  $Label9,0
+88	LOD  dsup,0
+89	LOD  pinicial,0
+90	LOD  pfinal,0
+91	CAL  mover_disco,$Label1
+92	OPR  0,1
+93	LIT  "Operaciones con arreglos:",0
+94	OPR  0,21
+95	LIT  "",0
+96	OPR  0,21
+97	LIT  0,0
+98	LIT  1,0
+99	STO  0,a
+100	LIT  1,0
+101	LIT  1,0
+102	STO  0,a
+103	LIT  2,0
+104	LIT  1,0
+105	STO  0,a
+106	LIT  3,0
+107	LIT  2,0
+108	STO  0,a
+109	LIT  4,0
+110	LIT  1,0
+111	STO  0,a
+112	LIT  5,0
+113	LIT  2,0
+114	STO  0,a
+115	LIT  6,0
+116	LIT  1,0
+117	STO  0,a
+118	LIT  0,0
+119	LIT  0,0
+120	LIT  2,0
+121	STO  0,b
+122	LIT  0,0
+123	LIT  1,0
+124	LIT  1,0
+125	STO  0,b
+126	LIT  0,0
+127	LIT  2,0
+128	LIT  3,0
+129	STO  0,b
+130	LIT  0,0
+131	LIT  3,0
+132	LIT  1,0
+133	STO  0,b
+134	LIT  0,0
+135	LIT  4,0
+136	LIT  2,0
+137	STO  0,b
+138	LIT  0,0
+139	LIT  5,0
+140	LIT  1,0
+141	STO  0,b
+142	LIT  1,0
+143	LIT  0,0
+144	LIT  2,0
+145	STO  0,b
+146	LIT  1,0
+147	LIT  1,0
+148	LIT  1,0
+149	STO  0,b
+150	LIT  1,0
+151	LIT  2,0
+152	LIT  3,0
+153	STO  0,b
+154	LIT  1,0
+155	LIT  3,0
+156	LIT  1,0
+157	STO  0,b
+158	LIT  1,0
+159	LIT  4,0
+160	LIT  2,0
+161	STO  0,b
+162	LIT  1,0
+163	LIT  5,0
+164	LIT  1,0
+165	STO  0,b
+166	LIT  0,0
+167	LOD  a,0
+168	LIT  2,0
+169	LOD  a,0
+170	LIT  2,0
+171	LOD  a,0
+172	LIT  1,0
+173	OPR  0,3
+174	LOD  a,0
+175	LIT  1,0
+176	LIT  1,0
+177	LOD  b,0
+178	LOD  a,0
+179	LIT  0,0
+180	LOD  a,0
+181	LIT  1,0
+182	LOD  a,0
+183	OPR  0,2
+184	LIT  1,0
+185	OPR  0,3
+186	LOD  a,0
+187	OPR  0,4
+188	OPR  0,2
+189	STO  0,b
+190	LIT  "El resultado de la operacion sobre variables dimensionadas es: ",0
+191	OPR  0,20
+192	LIT  1,0
+193	LIT  1,0
+194	LOD  b,0
+195	OPR  0,21
+196	OPR  0,1
+197	LIT  1,0
+198	STO  0,i
+199	LOD  $Label10,0
+200	CAL  arreglo,93
+201	LIT  "",0
+202	OPR  0,21
+203	LIT  0,0
+204	STO  0,i
+205	LOD  i,0
+206	LIT  9,0
+207	OPR  0,13
+208	JMC  F,$Label11
+209	LIT  "Escribe el arreglo en...",0
+210	OPR  0,21
+211	LIT  "la posicion ",0
+212	OPR  0,20
+213	LOD  i,0
+214	OPR  0,20
+215	LIT  ": ",0
+216	OPR  0,20
+217	LOD  i,0
+218	OPR  arr,19
+219	LIT  1,0
+220	LOD  i,0
+221	OPR  0,2
+222	STO  0,i
+223	JMP  0,205
+224	LIT  "",0
+225	OPR  0,21
+226	LOD  $Label12,0
+227	CAL  torres_h,2
+228	OPR  0,0

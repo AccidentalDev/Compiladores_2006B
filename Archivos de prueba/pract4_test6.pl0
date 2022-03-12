@@ -1,0 +1,17 @@
+1	OPR  x,19
+2	LOD  b,0
+3	OPR  xa,19
+4	LOD  b,0
+5	LIT  1,0
+6	OPR  ya,19
+7	OPR  X.a,19
+8	LIT  0,0
+9	LOD  xa,0
+10	OPR  Y.b,19
+11	LIT  2,0
+12	LOD  X.b,0
+13	OPR  Z.h,19
+14	LIT  2,0
+15	LIT  0,0
+16	OPR  Z.k,19
+17	OPR  0,0

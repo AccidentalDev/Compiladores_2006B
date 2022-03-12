@@ -1,0 +1,34 @@
+
+** Ordenamiento de arreglos con el metodo de Burbuja **
+
+Paso 1: Introducir cada elemento en el arreglo con dimension 10.
+Escribe el elemento # 1: 6
+Escribe el elemento # 2: 2
+Escribe el elemento # 3: 9
+Escribe el elemento # 4: 3
+Escribe el elemento # 5: 1
+Escribe el elemento # 6: 10
+Escribe el elemento # 7: 7
+Escribe el elemento # 8: 5
+Escribe el elemento # 9: 8
+Escribe el elemento # 10: 4
+
+presiona <Enter> para continuar
+
+
+Ordenando el arreglo...
+
+Original - Ordenado
+   6        1
+   2        2
+   9        3
+   3        4
+   1        5
+   10        6
+   7        7
+   5        8
+   8        9
+   4        10
+
+
+Programa terminado - Presione <ENTER> para salir...

@@ -1,0 +1,52 @@
+                     if(ProtOMod==1){
+                        if(!tabProtos.containsKey(lexema)){
+                           tabProtos.put(lexema,new Proto(lexema,'P',i,lineCounter));
+                           idKey=lexema;
+                        }else{
+                           String err="Ya está definido un prototipo con ese nombre: "+lexema;
+                           editor.errCount++;
+                           editor.errores(estado,3,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        }
+                     }else if(ProtOMod==2){
+                        //Revisa que no este el simbolo en la tabla
+                        if(!tabSim.containsKey(lexema)){
+                           //Busca que no exista un registro con el mismo nombre
+                           boolean esta=false;
+                           for(Enumeration e=tabSim.keys();e.hasMoreElements()&&!esta;){
+                              String keyTmp=(String)e.nextElement();
+                              String prefijo=lexema+".";
+                              if(keyTmp.startsWith(prefijo)&&keyTmp.indexOf('@')==-1)
+                                 esta=true;
+                           }
+                           if(!esta){
+                              idKey=lexema;
+                              modulo=lexema;
+                              tabSim.put(lexema,new Simbolo(lexema,'P',"<Ninguno>",""));
+                              //Busca un prototipo con ese nombre
+                              if(tabProtos.containsKey(lexema)){
+                                 Proto pt=(Proto)tabProtos.get(idKey);
+                                 if(!pt.esta){
+                                    pt.esta=true;
+                                    tieneProto=true;
+                                 }
+                              }
+                           }else{
+                              idKey=modulo="";
+                              String err="Ya está definido un identificador con ese nombre: "+lexema;
+                              editor.errCount++;
+                              editor.errores(estado,3,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                           }
+                        }else{
+                           idKey=modulo="";
+                           String claseErr;
+                           Simbolo smb=(Simbolo)tabSim.get(lexema);
+                           if(smb.clase=='P'||smb.clase=='F')
+                              claseErr="modulo";
+                           else
+                              claseErr="identificador";
+                           
+                           String err="Ya está definido un "+claseErr+" con ese nombre: "+lexema;
+                           editor.errCount++;
+                           editor.errores(estado,3,err,lineCounter,i,lexema,win,win.nombre,win.ruta);
+                        }
+                     }
